@@ -1,0 +1,52 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+*.class
+.settings/
+.project
+.classpath
+.factorypath
+
+# VS Code
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# H2 database files
+*.h2.db
+*.lock.db
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Application Properties
+application-*.properties
+
+# Environment specific files
+*.env
+
+# Build output
+target/
+
+# Local development files
+*.swp
+*.swo
+
+# Mac OS X
+.DS_Store
+
+# Application specific
+*.arrow
+*.parquet
+
+# Maven wrapper
+exclude: 'mvnw', 'mvnw.cmd', '.mvn/wrapper/maven-wrapper.jar'
