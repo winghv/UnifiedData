@@ -1,5 +1,14 @@
 # Unified Data Service
 
+## 📝 Changelog
+
+### [2025-06-24] - Initial Release
+- **Fixed**: Resolved 500 Internal Server Error on API endpoints by adding JVM argument `--add-opens=java.base/java.nio=ALL-UNNAMED`
+- **Fixed**: Resolved application startup failure by cleaning up duplicate properties in `application.properties`
+- **Added**: Spring Boot Actuator with `/actuator/health` and `/actuator/metrics` endpoints
+- **Improved**: Enhanced logging configuration for better debugging
+- **Added**: Git repository initialization with comprehensive `.gitignore`
+
 ## Overview
 
 The Unified Data Service is a high-performance Spring Boot application designed to fetch, parse, filter, and serve metric data from various sources. It leverages Apache Arrow for efficient in-memory columnar data processing, providing a fast and scalable solution for data unification.
