@@ -220,6 +220,11 @@ stock_code,event_time,metric_field_1,metric_field_2
 
 # Changelog
 
+-   **2025-06-24**:
+    -   Created GitHub repository and pushed initial codebase.
+    -   Set up remote repository for version control.
+    -   Updated documentation with repository information.
+
 -   **2025-06-19**:
     -   Initialized project structure with Spring Boot.
     -   Implemented core logic for data fetching, parsing (JSON/CSV), and caching.
