@@ -34,6 +34,9 @@ application-*.properties
 # Environment specific files
 *.env
 
+# Frontend dependencies
+frontend/node_modules/
+
 # Build output
 target/
 
