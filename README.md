@@ -137,6 +137,11 @@ src/main/java/com/example/unifieddataservice/
 
 ## 📝 变更日志 / Changelog
 
+### [2025-06-24] - 配置管理平台 / Configuration Management Platform
+- **新增 / Added**: 添加了一个完整的前后端分离的配置管理平台。
+- **后端 (Spring Boot)**: 实现了对配置的CRUD API。
+- **前端 (Vue.js)**: 创建了一个用户界面来管理配置。
+
 ### [2025-06-24] - 初始版本 / Initial Release
 - **修复 / Fixed**: 通过添加JVM参数解决API端点的500错误 / Resolved 500 error on API endpoints by adding JVM argument
 - **修复 / Fixed**: 清理重复的应用程序属性解决启动失败 / Fixed application startup by cleaning up duplicate properties
@@ -216,29 +221,21 @@ stock_code,event_time,metric_field_1,metric_field_2
 
 当 `MetricService` 遇到相应 `sourceType` 的 `MetricInfo` 记录时，它会自动发现并使用你的新解析器。
 
----
+## 📜 更新日志 / Changelog
 
-# Changelog
+### [Unreleased]
+#### Added
+- 新增配置管理功能，支持配置项的增删改查
+- 集成 Element Plus 实现现代化 UI 界面
+- 添加股票市场相关配置项（数据源、监控股票列表、技术指标等）
+- 添加配置项预览功能，支持 JSON 格式化显示
 
--   **2025-06-24**:
-    -   Created GitHub repository and pushed initial codebase.
-    -   Set up remote repository for version control.
-    -   Updated documentation with repository information.
+#### Changed
+- 重构前端界面，使用 Element Plus 组件库
+- 优化配置项表单验证和错误处理
+- 改进配置项值的展示格式
 
--   **2025-06-19**:
-    -   Initialized project structure with Spring Boot.
-    -   Implemented core logic for data fetching, parsing (JSON/CSV), and caching.
-    -   Exposed data via a REST API (`/api/metrics/{metricName}`).
-    -   Added `README.md` with English and Chinese documentation.
--   **2025-06-19**: Added server-side filtering capabilities to the API via a `filter` query parameter.
--   **2025-06-19**: Build and Stability Fixes
-    -   **Dependency & Build Fixes**:
-        -   Resolved Apache Arrow native library issues on Apple Silicon by adding the `maven-surefire-plugin` with the `--add-opens=java.base/java.nio=ALL-UNNAMED` JVM argument, ensuring tests run correctly on modern Java versions.
-        -   Upgraded `byte-buddy` to version `1.14.17` to ensure compatibility with Java 23 and Mockito.
-    -   **Code & Test Fixes**:
-        -   Corrected an import for `DefaultHttpRequestRetryStrategy` in `HttpClientConfig.java`.
-        -   Added a missing import for `java.util.stream.Collectors` in `MetricController.java`.
-        -   Fixed a `NumberFormatException` in `CsvDataParser.java` by adding `try-catch` blocks to handle malformed numbers gracefully.
-        -   Fixed a `ClassCastException` in `JsonDataParser.java` by using the correct `TimeStampMilliTZVector` for timestamp values.
-        -   Resolved a `ClassCastException` in `JsonDataParserTest.java` by updating the test to expect the correct `TimeStampMilliTZVector` type.
-        -   Fixed an `UnnecessaryStubbingException` in `MetricServiceTest.java` by using lenient Mockito settings to prevent test failures from unused stubs.
+#### Fixed
+- 修复前端构建问题
+- 修复后端 API 跨域配置
+
