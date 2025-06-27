@@ -1,13 +1,15 @@
 <template>
   <el-container class="app-container">
     <el-header class="app-header">
-      <h1>Configuration Management</h1>
+      <h1>Unified Data Service</h1>
     </el-header>
     <el-main>
-      <el-card>
-        <div class="toolbar">
-          <el-button type="primary" @click="handleAdd">Add Configuration</el-button>
-        </div>
+      <el-tabs v-model="activeTab" type="card">
+        <el-tab-pane label="Configuration Management" name="config">
+          <el-card>
+            <div class="toolbar">
+              <el-button type="primary" @click="handleAdd">Add Configuration</el-button>
+            </div>
         <el-table :data="configurations" stripe style="width: 100%">
           <el-table-column prop="name" label="Name" width="180"></el-table-column>
           <el-table-column prop="configType" label="Type" width="150"></el-table-column>
@@ -25,7 +27,13 @@
             </template>
           </el-table-column>
         </el-table>
-      </el-card>
+          </el-card>
+        </el-tab-pane>
+        
+        <el-tab-pane label="Stock Market Data" name="stocks">
+          <stock-data-viewer />
+        </el-tab-pane>
+      </el-tabs>
     </el-main>
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? 'Edit Configuration' : 'Add Configuration'" width="50%">
@@ -57,12 +65,14 @@
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import StockDataViewer from './components/StockDataViewer.vue';
 
 const configurations = ref([]);
+const activeTab = ref('config');
 const dialogVisible = ref(false);
 const isEdit = ref(false);
 const form = ref({
-  id: null,
+  id: '',
   name: '',
   configType: '',
   configValue: '',
