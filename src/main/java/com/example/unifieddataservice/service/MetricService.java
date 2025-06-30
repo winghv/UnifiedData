@@ -172,8 +172,10 @@ public class MetricService {
         
         switch (type) {
             case HTTP_JSON:
+            case FILE_JSON:
                 return jsonDataParser;
             case HTTP_CSV:
+            case FILE_CSV:
                 return csvDataParser;
             default:
                 String errorMsg = "Unsupported data source type: " + type;

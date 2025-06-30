@@ -26,6 +26,22 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) throws Exception {
         // Initialize MetricInfo data if the table is empty
         if (metricInfoRepository.count() == 0) {
+            // Metric 0: Stock Data (CSV from local file)
+            MetricInfo stockData = new MetricInfo();
+            stockData.setName("stock_data");
+            stockData.setDataSourceType(DataSourceType.FILE_CSV);
+            stockData.setSourceUrl("/Users/mac/VscodeProjects/UnifiedData/sample-data/stock_data.csv");
+            stockData.setDataPath(""); // CSV无需dataPath
+            stockData.setFieldMappings(Map.of(
+                "stkcode", DataType.STRING,
+                "timestamp", DataType.LONG,
+                "macd", DataType.DOUBLE,
+                "pe", DataType.DOUBLE,
+                "close", DataType.DOUBLE,
+                "volume", DataType.LONG
+            ));
+            metricInfoRepository.save(stockData);
+
             // Metric 1: Posts (JSON)
             MetricInfo posts = new MetricInfo();
             posts.setName("posts");

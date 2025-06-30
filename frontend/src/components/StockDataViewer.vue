@@ -1,13 +1,7 @@
 <template>
   <div class="stock-data-viewer">
-    <h2>Stock Market Data</h2>
-    
-    <div class="data-source-selector">
-      <el-radio-group v-model="dataSource" @change="loadData">
-        <el-radio-button label="json">JSON Data</el-radio-button>
-        <el-radio-button label="csv">CSV Data</el-radio-button>
-      </el-radio-group>
-      
+    <div class="header">
+      <h2>Stock Market Data</h2>
       <el-button 
         type="primary" 
         @click="loadData" 
@@ -59,7 +53,6 @@ export default {
   name: 'StockDataViewer',
   data() {
     return {
-      dataSource: 'json',
       stockData: [],
       rawData: null,
       loading: false
@@ -79,11 +72,11 @@ export default {
       this.loading = true;
       try {
         const backendUrl = 'http://localhost:8080';
-        const response = await fetch(`${backendUrl}/api/stock-data?source=${this.dataSource}`, {
+        const response = await fetch(`${backendUrl}/api/metrics/stock_data`, {
           method: 'GET',
           headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Accept': 'text/csv',
+            'Content-Type': 'text/csv'
           },
           mode: 'cors',
           credentials: 'omit'
@@ -94,9 +87,9 @@ export default {
           throw new Error(`Failed to fetch stock data: ${response.status} ${response.statusText}`);
         }
         
-        const data = await response.json();
-        this.rawData = data;
-        this.stockData = data.status_code === 0 ? data.datas : [];
+        const csvText = await response.text();
+        this.rawData = csvText;
+        this.stockData = this.parseCsvToJson(csvText);
       } catch (error) {
         console.error('Error loading stock data:', error);
         this.$message.error(`Failed to load stock data: ${error.message}`);
@@ -112,6 +105,26 @@ export default {
     formatNumber(num) {
       if (!num) return '0';
       return parseInt(num).toLocaleString();
+    },
+    parseCsvToJson(csvText) {
+      const lines = csvText.trim().split('\n');
+      if (lines.length < 2) return [];
+      
+      const headers = lines[0].split(',');
+      const result = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        const entry = {};
+        
+        for (let j = 0; j < headers.length; j++) {
+          entry[headers[j].trim()] = values[j] ? values[j].trim() : '';
+        }
+        
+        result.push(entry);
+      }
+      
+      return result;
     }
   }
 };
@@ -124,10 +137,11 @@ export default {
   margin: 0 auto;
 }
 
-.data-source-selector {
-  margin: 20px 0;
+.header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
+  margin-bottom: 20px;
 }
 
 .data-preview {

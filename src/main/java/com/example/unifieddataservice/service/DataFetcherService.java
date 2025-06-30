@@ -38,6 +38,29 @@ public class DataFetcherService {
 
         logger.info("Fetching data from URL: {}", url);
         
+        // 判断是否为本地文件路径
+        if (url.startsWith("file://")) {
+            String filePath = url.substring("file://".length());
+            try {
+                logger.info("Reading local file: {}", filePath);
+                return new java.io.FileInputStream(filePath);
+            } catch (IOException e) {
+                String errorMsg = String.format("Failed to read local file: %s. Error: %s", filePath, e.getMessage());
+                logger.error(errorMsg, e);
+                throw new RuntimeException(errorMsg, e);
+            }
+        } else if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            // 直接认为是本地路径
+            try {
+                logger.info("Reading local file: {}", url);
+                return new java.io.FileInputStream(url);
+            } catch (IOException e) {
+                String errorMsg = String.format("Failed to read local file: %s. Error: %s", url, e.getMessage());
+                logger.error(errorMsg, e);
+                throw new RuntimeException(errorMsg, e);
+            }
+        }
+
         try {
             // Create HTTP request with timeout
             HttpRequest request = HttpRequest.newBuilder()
