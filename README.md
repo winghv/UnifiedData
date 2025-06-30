@@ -135,30 +135,6 @@ src/main/java/com/example/unifieddataservice/
         └── JsonDataParser.java # JSON解析器 / JSON parser
 ```
 
-## 📝 变更日志 / Changelog
-
-### [2025-06-24] - 配置管理平台 / Configuration Management Platform
-- **新增 / Added**: 添加了一个完整的前后端分离的配置管理平台。
-- **后端 (Spring Boot)**: 实现了对配置的CRUD API。
-- **前端 (Vue.js)**: 创建了一个用户界面来管理配置。
-
-### [2025-06-24] - 初始版本 / Initial Release
-- **修复 / Fixed**: 通过添加JVM参数解决API端点的500错误 / Resolved 500 error on API endpoints by adding JVM argument
-- **修复 / Fixed**: 清理重复的应用程序属性解决启动失败 / Fixed application startup by cleaning up duplicate properties
-- **新增 / Added**: 添加Spring Boot Actuator支持 / Added Spring Boot Actuator support
-- **改进 / Improved**: 增强日志配置 / Enhanced logging configuration
-- **新增 / Added**: 初始化Git仓库 / Initialized Git repository
-
-### [2025-06-23] - Bug修复和测试改进 / Bug Fixes and Test Improvements
-- **修复JSON解析器时间戳处理 / Fixed JSON Parser Timestamp Handling**
-  - 在`JsonDataParser`中添加对`TIMESTAMP`数据类型的支持 / Added support for `TIMESTAMP` data type
-  - 修复JSON数据中时间戳字段的空值处理 / Fixed null handling for timestamp fields
-  - 更新测试数据以正确表示空时间戳值 / Updated test data for null timestamp values
-
-- **测试套件改进 / Test Suite Improvements**
-  - 修复测试数据中的字段名称不匹配 / Fixed field name mismatches in test data
-  - 解决时间戳向量的`ClassCastException` / Resolved `ClassCastException` for timestamp vectors
-  - 确保`JsonDataParserTest`中的所有测试通过 / Ensured all tests in `JsonDataParserTest` pass
 
 ## 📄 许可证 / License
 
