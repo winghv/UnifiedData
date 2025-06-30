@@ -93,6 +93,15 @@ public class CsvDataParser implements DataParser {
                                     case BOOLEAN:
                                         ((BitVector) vector).setSafe(rowIndex, Boolean.parseBoolean(value.trim()) ? 1 : 0);
                                         break;
+                                    case TIMESTAMP:
+                                        try {
+                                            long timestamp = Long.parseLong(value.trim());
+                                            ((TimeStampMilliTZVector) vector).setSafe(rowIndex, timestamp);
+                                        } catch (NumberFormatException e) {
+                                            // Set to null if timestamp is malformed
+                                            vector.setNull(rowIndex);
+                                        }
+                                        break;
                                 }
                             } catch (Exception e) {
                                 // Handle any field-level parsing errors by setting to null
