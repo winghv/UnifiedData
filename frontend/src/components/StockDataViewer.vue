@@ -90,6 +90,7 @@ export default {
         const csvText = await response.text();
         this.rawData = csvText;
         this.stockData = this.parseCsvToJson(csvText);
+
       } catch (error) {
         console.error('Error loading stock data:', error);
         this.$message.error(`Failed to load stock data: ${error.message}`);
