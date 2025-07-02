@@ -70,6 +70,13 @@
 			<version>1.10.0</version>
 		</dependency>
 
+		<!-- SQL Parser -->
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <version>4.9</version>
+        </dependency>
+
 		<!-- Monitoring -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

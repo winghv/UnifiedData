@@ -16,15 +16,25 @@ Unified Data Service is a high-performance Spring Boot application designed to f
   - 无需修改代码，仅通过在数据库中添加元数据定义，即可动态接入新的数据指标
   - No code changes needed, dynamically integrate new data metrics by adding metadata definitions to the database
 
-- **高度可扩展 / Highly Extensible**
-  - 采用策略模式，通过实现 `DataParser` 接口，轻松添加新的数据格式解析能力
-  - Easily add support for new data formats by implementing the `DataParser` interface
+- **SQL 查询接口 / SQL Query Interface**
+  - 支持标准 SQL 语法查询逻辑表数据
+  - Supports standard SQL syntax for querying logical tables
+  - 自动将 SQL 查询转换为底层指标查询计划
+  - Automatically translates SQL queries to underlying metric query plans
+
+- **逻辑表抽象 / Logical Table Abstraction**
+  - 将多个指标组织为逻辑表，支持表连接和复杂查询
+  - Organizes multiple metrics into logical tables with support for joins and complex queries
+  - 支持按时间和代码分区，优化查询性能
+  - Supports partitioning by time and code for optimized query performance
 
 - **高性能 / High Performance**
   - 使用 Apache Arrow 进行高效的内存列式数据处理
   - Efficient in-memory columnar data processing with Apache Arrow
   - 基于 Caffeine 的缓存层，提高重复查询性能
   - Caffeine-based caching layer for improved performance on repeated queries
+  - 流式处理大型结果集，降低内存占用
+  - Streaming of large result sets to reduce memory footprint
 
 - **统一与标准化 / Unification & Standardization**
   - 将多格式的外部数据源统一清洗为标准化的中间数据结构
@@ -58,11 +68,12 @@ mvn spring-boot:run
   - Spring Boot 3.2.5
   - Spring Data JPA
   - Spring Cache (Caffeine)
+  - JSqlParser (SQL 解析)
 
 - **数据处理 / Data Processing**
-  - Apache Arrow 15.0.0
-  - Jackson (JSON)
-  - Apache Commons CSV
+  - Apache Arrow 15.0.0 (列式存储与处理 / Columnar storage and processing)
+  - Jackson (JSON 处理 / JSON processing)
+  - Apache Commons CSV (CSV 处理 / CSV processing)
 
 - **数据库 / Database**
   - H2 (内存数据库 / In-memory)
@@ -76,7 +87,7 @@ mvn spring-boot:run
 
 ## 🔍 API 文档 / API Documentation
 
-### 获取指标数据 / Get Metric Data
+### 1. 获取指标数据 / Get Metric Data
 
 - **URL**: `GET /api/metrics/{metricName}`
 - **Response**: `text/csv`
@@ -88,10 +99,68 @@ mvn spring-boot:run
 | metricName     | Path       | 是 / Yes       | 指标名称 / Metric name (e.g., `user_signups`, `system_load`) |
 | filter         | Query      | 否 / No        | 过滤表达式 / Filter expression (e.g., `age > 30`, `region == 'US'`) |
 
+### 2. 执行 SQL 查询 / Execute SQL Query
+
+- **URL**: `GET /api/query`
+- **Response**: `application/json` 或 `application/vnd.apache.arrow.stream`
+
+#### 参数 / Parameters
+
+| 参数 / Parameter | 类型 / Type | 必填 / Required | 描述 / Description |
+|----------------|------------|----------------|-------------------|
+| sql            | Query      | 是 / Yes       | SQL 查询语句 / SQL query statement |
+| format         | Query      | 否 / No        | 响应格式: `json` 或 `arrow` (默认为 `arrow`) / Response format: `json` or `arrow` (default: `arrow`)
+
 #### 操作符 / Operators
 - 比较: `==`, `!=`, `>`, `<`, `>=`, `<=`
 - 字符串值必须用单引号括起来 / String values must be enclosed in single quotes
 - 数值不需要引号 / Numeric values should not be quoted
+
+#### SQL 查询示例 / SQL Query Examples
+
+```sql
+-- 查询股票日线数据
+SELECT * FROM stock_daily WHERE code = '000001.SZ' AND trade_date >= '2023-01-01';
+
+-- 多表连接查询
+SELECT a.code, a.trade_date, a.close, b.volume 
+FROM stock_daily a 
+JOIN stock_volume b ON a.code = b.code AND a.trade_date = b.trade_date
+WHERE a.code IN ('000001.SZ', '600000.SH');
+
+-- 聚合查询
+SELECT code, AVG(close) as avg_price, SUM(volume) as total_volume
+FROM stock_daily
+WHERE trade_date BETWEEN '2023-01-01' AND '2023-12-31'
+GROUP BY code
+HAVING AVG(close) > 10.0;
+```
+
+#### 流式响应 / Streaming Response
+
+对于大型结果集，API 支持流式响应（使用 Apache Arrow 格式）:
+
+```bash
+# 获取 Arrow 格式的流式响应
+curl -H "Accept: application/vnd.apache.arrow.stream" "http://localhost:8080/api/query?sql=SELECT * FROM large_table" > results.arrow
+
+# 使用 Python 读取流式响应
+import pyarrow as pa
+import requests
+
+response = requests.get(
+    'http://localhost:8080/api/query',
+    params={'sql': 'SELECT * FROM large_table'},
+    headers={'Accept': 'application/vnd.apache.arrow.stream'},
+    stream=True
+)
+
+with pa.ipc.open_stream(response.raw) as reader:
+    for batch in reader:
+        df = batch.to_pandas()
+        # 处理批次数据 / Process batch data
+        print(df)
+```
 
 #### 示例 / Examples
 
@@ -100,26 +169,31 @@ mvn spring-boot:run
 curl http://localhost:8080/api/metrics/user_signups
 
 # 获取年龄大于30的用户数据 / Get users older than 30
-curl "http://localhost:8080/api/metrics/user_signups?filter=age > 30"
+curl "http://localhost:8080/api/metrics/sample_json_metric?filter=age > 30"
 
 # 获取美国地区用户数据 / Get users from US region
-curl "http://localhost:8080/api/metrics/user_signups?filter=region == 'US'"
+curl "http://localhost:8080/api/metrics/sample_json_metric?filter=region == 'US'"
 ```
 
-## 🏗️ 项目结构 / Project Structure
+## 项目结构 / Project Structure
 
 ```
 src/main/java/com/example/unifieddataservice/
-├── config/               # 配置类 / Configuration classes
-│   ├── CacheConfig.java   # 缓存配置 / Cache configuration
-│   ├── DataInitializer.java # 数据初始化 / Data initialization
-│   └── HttpClientConfig.java # HTTP客户端配置 / HTTP client configuration
-├── controller/           # 控制器 / Controllers
-│   └── MetricController.java # 指标API / Metrics API
-├── model/                # 数据模型 / Data models
-│   ├── DataSourceType.java # 数据源类型枚举 / Data source type enum
-│   ├── DataType.java     # 数据类型枚举 / Data type enum
-│   ├── MetricInfo.java   # 指标信息实体 / Metric info entity
+├── UnifiedDataApplication.java  # 应用入口 / Application entry point
+├── config/             # 配置类 / Configuration classes
+│   └── AppConfig.java  # 应用配置 / Application configuration
+├── controller/         # Web 控制器 / Web controllers
+│   ├── MetricController.java  # 指标API控制器 / Metric API controller
+│   ├── QueryController.java   # SQL查询API控制器 / SQL Query API controller
+│   └── UnifiedDataTable.java  # 统一数据表 / Unified data table
+├── model/              # 数据模型 / Data models
+│   ├── TableDefinition.java   # 逻辑表定义 / Logical table definition
+│   └── MetricQueryPlan.java   # 查询计划 / Query plan
+├── service/            # 业务逻辑 / Business logic
+│   ├── SqlQueryService.java   # SQL查询服务 / SQL query service
+│   └── TableRegistry.java     # 逻辑表注册中心 / Table registry
+└── util/               # 工具类 / Utilities
+    └── ArrowJoinUtil.java     # Arrow表连接工具 / Arrow table join utility
 │   └── UnifiedDataTable.java # 统一数据表 / Unified data table
 ├── repository/           # 数据访问层 / Data access layer
 │   └── MetricInfoRepository.java # 指标仓库 / Metric repository
