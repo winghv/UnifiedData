@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -51,14 +52,24 @@ public class MetricService {
     @Cacheable(value = "metrics", key = "#metricName", sync = true)
     public UnifiedDataTable getMetricData(String metricName) {
         logger.info("Getting metric data for: {}", metricName);
-        return loadMetricData(metricName);
+        return loadMetricData(metricName, null);
+    }
+
+    /**
+     * Parameterized version supporting options for metrics that accept arguments, e.g. adjust=post.
+     * Options map can be null or empty if no parameters are required.
+     */
+    @Cacheable(value = "metrics", key = "#metricName + ':' + (#options == null ? '' : #options.hashCode())", sync = true)
+    public UnifiedDataTable getMetricData(String metricName, Map<String, String> options) {
+        logger.info("Getting metric data for: {}, options: {}", metricName, options);
+        return loadMetricData(metricName, options);
     }
     
     /**
      * Loads metric data without checking the cache.
      * This method is package-private for testing purposes.
      */
-    UnifiedDataTable loadMetricData(String metricName) {
+    UnifiedDataTable loadMetricData(String metricName, Map<String, String> options) {
         logger.info("Loading metric data for: {}", metricName);
         
         try {
@@ -72,6 +83,7 @@ public class MetricService {
 
             MetricInfo metricInfo = metricInfoOpt.get();
             logger.debug("Found metric info: {}", metricInfo);
+            // TODO: If metric supports parameters, validate & apply them here using 'options'.
             
             // Fetch the data
             logger.info("Fetching data from: {}", metricInfo.getSourceUrl());
