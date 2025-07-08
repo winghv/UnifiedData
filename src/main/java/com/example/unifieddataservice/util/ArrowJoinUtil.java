@@ -1,13 +1,13 @@
 package com.example.unifieddataservice.util;
 
 import com.example.unifieddataservice.model.UnifiedDataTable;
-import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.pojo.Field;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.util.*;
 
@@ -16,9 +16,15 @@ import java.util.*;
  * This is a simplified implementation optimised for small-to-medium result sets (<100k rows).
  * For larger data, consider leveraging Gandiva/Arrow algorithms or pushing join to storage layer.
  */
+@Component
 public class ArrowJoinUtil {
 
-    private static final Logger logger = LoggerFactory.getLogger(ArrowJoinUtil.class);
+    private final RootAllocator rootAllocator;
+
+    @Autowired
+    public ArrowJoinUtil(RootAllocator rootAllocator) {
+        this.rootAllocator = rootAllocator;
+    }
 
     /**
      * Perform inner join of provided tables on specified key columns.
@@ -28,7 +34,7 @@ public class ArrowJoinUtil {
      * @param keyColumns list of column names that exist in every table
      * @return joined UnifiedDataTable
      */
-    public static UnifiedDataTable joinOnKeys(List<UnifiedDataTable> tables, List<String> keyColumns) {
+    public UnifiedDataTable joinOnKeys(List<UnifiedDataTable> tables, List<String> keyColumns) {
         if (tables == null || tables.isEmpty()) {
             throw new IllegalArgumentException("No tables provided for join");
         }
@@ -55,8 +61,7 @@ public class ArrowJoinUtil {
             }
         }
 
-        BufferAllocator allocator = new RootAllocator();
-        VectorSchemaRoot joinedRoot = VectorSchemaRoot.create(new org.apache.arrow.vector.types.pojo.Schema(combinedFields), allocator);
+        VectorSchemaRoot joinedRoot = VectorSchemaRoot.create(new org.apache.arrow.vector.types.pojo.Schema(combinedFields), rootAllocator);
         joinedRoot.allocateNew();
 
         // Map field name -> FieldVector in joined root
@@ -106,19 +111,19 @@ public class ArrowJoinUtil {
         return new UnifiedDataTable(joinedRoot);
     }
 
-    private static Map<String, Integer> buildKeyIndexMap(VectorSchemaRoot root, List<String> keyCols) {
+    private Map<String, Integer> buildKeyIndexMap(VectorSchemaRoot table, List<String> keyColumns) {
         Map<String, Integer> map = new HashMap<>();
-        for (int row = 0; row < root.getRowCount(); row++) {
-            map.put(buildKeyString(root, keyCols, row), row);
+        for (int row = 0; row < table.getRowCount(); row++) {
+            map.put(buildKeyString(table, keyColumns, row), row);
         }
         return map;
     }
 
-    private static String buildKeyString(VectorSchemaRoot root, List<String> keyCols, int row) {
+    private String buildKeyString(VectorSchemaRoot table, List<String> keyColumns, int rowIndex) {
         StringBuilder sb = new StringBuilder();
-        for (String col : keyCols) {
-            FieldVector vec = root.getVector(col);
-            sb.append(vec.getObject(row)).append('|');
+        for (String col : keyColumns) {
+            FieldVector vec = table.getVector(col);
+            sb.append(vec.getObject(rowIndex)).append('|');
         }
         return sb.toString();
     }

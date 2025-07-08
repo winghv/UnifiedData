@@ -2,6 +2,7 @@ package com.example.unifieddataservice.service.parser;
 
 import com.example.unifieddataservice.model.DataType;
 import com.example.unifieddataservice.model.UnifiedDataTable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.core.JsonPointer;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,8 +26,13 @@ import java.util.stream.Collectors;
 
 @Component
 public class JsonDataParser implements DataParser {
+    private final RootAllocator rootAllocator;
     private static final Logger logger = LoggerFactory.getLogger(JsonDataParser.class);
-    private static final RootAllocator allocator = new RootAllocator(Long.MAX_VALUE);
+
+    @Autowired
+    public JsonDataParser(RootAllocator rootAllocator) {
+        this.rootAllocator = rootAllocator;
+    }
     
     private String inputStreamToString(InputStream is) {
         try {
@@ -79,7 +85,7 @@ public class JsonDataParser implements DataParser {
         Map<String, Field> arrowFields = DataTypeMapper.toArrowFields(fieldMappings);
         List<Field> fields = new ArrayList<>(arrowFields.values());
         Schema schema = new Schema(fields, null);
-        VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, allocator);
+        VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, rootAllocator);
         vectorSchemaRoot.allocateNew();
         vectorSchemaRoot.setRowCount(0);
         return new UnifiedDataTable(vectorSchemaRoot);
@@ -167,7 +173,7 @@ public class JsonDataParser implements DataParser {
             }
             
             Schema schema = new Schema(fields, null);
-            VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, allocator);
+            VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, rootAllocator);
             vectorSchemaRoot.allocateNew();
             
             logger.debug("Created VectorSchemaRoot with schema: {}", schema);

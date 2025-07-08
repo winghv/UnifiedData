@@ -11,7 +11,9 @@
   "dependencies": {
     "axios": "^1.4.0",
     "element-plus": "^2.10.2",
-    "vue": "^3.3.0"
+    "vue": "^3.3.0",
+    "vue-router": "^4.3.2",
+    "apache-arrow": "^15.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.2.3",

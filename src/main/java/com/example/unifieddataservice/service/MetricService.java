@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +48,50 @@ public class MetricService {
         this.dataFilteringService = dataFilteringService;
         this.jsonDataParser = jsonDataParser;
         this.csvDataParser = csvDataParser;
+    }
+
+    // CRUD operations for MetricInfo
+
+    @CacheEvict(value = "metrics", allEntries = true)
+    public MetricInfo saveMetric(MetricInfo metricInfo) {
+        logger.info("Saving new metric: {}", metricInfo.getName());
+        return metricInfoRepository.save(metricInfo);
+    }
+
+    @Cacheable(value = "metrics", key = "'all'")
+    public List<MetricInfo> getAllMetrics() {
+        logger.info("Fetching all metrics");
+        return metricInfoRepository.findAll();
+    }
+
+    @Cacheable(value = "metrics", key = "#id")
+    public Optional<MetricInfo> getMetricById(Long id) {
+        logger.info("Fetching metric by id: {}", id);
+        return metricInfoRepository.findById(id);
+    }
+
+    @CacheEvict(value = "metrics", allEntries = true)
+    public MetricInfo updateMetric(Long id, MetricInfo metricDetails) {
+        logger.info("Updating metric id: {}", id);
+        MetricInfo metricInfo = metricInfoRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Metric not found with id: " + id));
+
+        metricInfo.setName(metricDetails.getName());
+        metricInfo.setDataSourceType(metricDetails.getDataSourceType());
+        metricInfo.setSourceUrl(metricDetails.getSourceUrl());
+        metricInfo.setDataPath(metricDetails.getDataPath());
+        metricInfo.setFieldMappings(metricDetails.getFieldMappings());
+
+        return metricInfoRepository.save(metricInfo);
+    }
+
+    @CacheEvict(value = "metrics", allEntries = true)
+    public void deleteMetric(Long id) {
+        logger.info("Deleting metric id: {}", id);
+        if (!metricInfoRepository.existsById(id)) {
+            throw new IllegalArgumentException("Metric not found with id: " + id);
+        }
+        metricInfoRepository.deleteById(id);
     }
 
     @Cacheable(value = "metrics", key = "#metricName", sync = true)

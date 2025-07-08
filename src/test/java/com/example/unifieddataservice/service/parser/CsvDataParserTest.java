@@ -3,6 +3,7 @@ package com.example.unifieddataservice.service.parser;
 import com.example.unifieddataservice.model.DataType;
 import com.example.unifieddataservice.model.MetricInfo;
 import com.example.unifieddataservice.model.UnifiedDataTable;
+import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,10 +21,12 @@ class CsvDataParserTest {
 
     private CsvDataParser parser;
     private MetricInfo metricInfo;
+    private RootAllocator rootAllocator;
 
     @BeforeEach
     void setUp() {
-        parser = new CsvDataParser();
+        rootAllocator = new RootAllocator(Long.MAX_VALUE);
+        parser = new CsvDataParser(rootAllocator);
         metricInfo = new MetricInfo();
         // Create field mappings map
         Map<String, DataType> fieldMappings = new HashMap<>();

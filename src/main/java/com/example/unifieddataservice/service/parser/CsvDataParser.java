@@ -2,6 +2,7 @@ package com.example.unifieddataservice.service.parser;
 
 import com.example.unifieddataservice.model.DataType;
 import com.example.unifieddataservice.model.UnifiedDataTable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.*;
@@ -22,8 +23,13 @@ import java.util.stream.Collectors;
 
 @Component
 public class CsvDataParser implements DataParser {
+    private final RootAllocator rootAllocator;
 
-    private static final RootAllocator allocator = new RootAllocator(Long.MAX_VALUE);
+
+    @Autowired
+    public CsvDataParser(RootAllocator rootAllocator) {
+        this.rootAllocator = rootAllocator;
+    }
 
     @Override
     public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath) {
@@ -57,7 +63,7 @@ public class CsvDataParser implements DataParser {
                 .collect(Collectors.toList());
 
             Schema schema = new Schema(fields, null);
-            VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, allocator);
+            VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, rootAllocator);
             vectorSchemaRoot.allocateNew();
 
             List<CSVRecord> records = csvParser.getRecords();

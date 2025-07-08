@@ -179,35 +179,43 @@ curl "http://localhost:8080/api/metrics/sample_json_metric?filter=region == 'US'
 
 ```
 src/main/java/com/example/unifieddataservice/
-├── UnifiedDataApplication.java  # 应用入口 / Application entry point
-├── config/             # 配置类 / Configuration classes
-│   └── AppConfig.java  # 应用配置 / Application configuration
-├── controller/         # Web 控制器 / Web controllers
-│   ├── MetricController.java  # 指标API控制器 / Metric API controller
-│   ├── QueryController.java   # SQL查询API控制器 / SQL Query API controller
-│   └── UnifiedDataTable.java  # 统一数据表 / Unified data table
-├── model/              # 数据模型 / Data models
-│   ├── TableDefinition.java   # 逻辑表定义 / Logical table definition
-│   └── MetricQueryPlan.java   # 查询计划 / Query plan
-├── service/            # 业务逻辑 / Business logic
-│   ├── SqlQueryService.java   # SQL查询服务 / SQL query service
-│   └── TableRegistry.java     # 逻辑表注册中心 / Table registry
-└── util/               # 工具类 / Utilities
-    └── ArrowJoinUtil.java     # Arrow表连接工具 / Arrow table join utility
-│   └── UnifiedDataTable.java # 统一数据表 / Unified data table
-├── repository/           # 数据访问层 / Data access layer
+├── UnifiedDataServiceApplication.java  # 应用入口 / Application entry point
+├── config/                     # 配置类 / Configuration classes
+│   └── ArrowConfig.java        # Apache Arrow 配置 / Apache Arrow configuration
+├── controller/                 # Web 控制器 / Web controllers
+│   ├── MetricController.java   # 指标API控制器 / Metric API controller
+│   └── QueryController.java    # SQL查询API控制器 / SQL Query API controller
+├── model/                      # 数据模型 / Data models
+│   ├── MetricInfo.java         # 指标定义 / Metric definition
+│   ├── TableDefinition.java    # 逻辑表定义 / Logical table definition
+│   └── UnifiedDataTable.java   # 统一数据表 / Unified data table
+├── repository/                 # 数据访问层 / Data access layer
 │   └── MetricInfoRepository.java # 指标仓库 / Metric repository
-└── service/              # 业务逻辑 / Business logic
-    ├── CsvDataExporter.java # CSV导出器 / CSV exporter
-    ├── DataFetcherService.java # 数据获取服务 / Data fetcher service
-    ├── DataFilteringService.java # 数据过滤服务 / Data filtering service
-    ├── MetricService.java # 指标服务 / Metric service
-    └── parser/          # 数据解析器 / Data parsers
-        ├── CsvDataParser.java # CSV解析器 / CSV parser
-        ├── DataParser.java   # 解析器接口 / Parser interface
-        ├── DataTypeMapper.java # 数据类型映射 / Data type mapper
-        └── JsonDataParser.java # JSON解析器 / JSON parser
+├── service/                    # 业务逻辑 / Business logic
+│   ├── MetricService.java      # 指标服务 / Metric service
+│   ├── SqlQueryService.java    # SQL查询服务 / SQL query service
+│   ├── TableRegistry.java      # 逻辑表注册中心 / Table registry
+│   └── parser/                 # 数据解析器 / Data parsers
+│       ├── CsvDataParser.java  # CSV解析器 / CSV parser
+│       ├── DataParser.java     # 解析器接口 / Parser interface
+│       └── JsonDataParser.java # JSON解析器 / JSON parser
+└── util/                       # 工具类 / Utilities
+    └── ArrowJoinUtil.java      # Arrow表连接工具 / Arrow table join utility
 ```
+
+## 📜 更新日志 / Changelog
+
+### [Unreleased]
+#### Fixed
+- **解决了后端服务无法启动的严重问题**：通过重构Apache Arrow的内存管理机制，创建了一个由Spring统一管理的`RootAllocator`，并更新了所有相关服务（`MetricService`, `JsonDataParser`, `CsvDataParser`, `ArrowJoinUtil`, `SqlQueryService`），确保内存分配的统一和稳定，从而解决了因内存分配器冲突导致的启动失败问题。
+
+#### Added
+- 实现了指标、逻辑表和SQL查询的完整CRUD和查询API。
+- 增加了对CSV和JSON两种数据源的解析能力。
+- 实现了基于Apache Arrow的内存数据表和表连接功能，以支持高性能的即席查询。
+
+#### Changed
+- 将多个使用Apache Arrow的工具类（如`ArrowJoinUtil`）和服务重构为Spring管理的组件，以实现依赖注入和统一的生命周期管理。
 
 
 ## 📄 许可证 / License
@@ -270,22 +278,4 @@ stock_code,event_time,metric_field_1,metric_field_2
 5.  实现 `parse` 方法，将 `InputStream` 转换为 `UnifiedDataTable`。
 
 当 `MetricService` 遇到相应 `sourceType` 的 `MetricInfo` 记录时，它会自动发现并使用你的新解析器。
-
-## 📜 更新日志 / Changelog
-
-### [Unreleased]
-#### Added
-- 新增配置管理功能，支持配置项的增删改查
-- 集成 Element Plus 实现现代化 UI 界面
-- 添加股票市场相关配置项（数据源、监控股票列表、技术指标等）
-- 添加配置项预览功能，支持 JSON 格式化显示
-
-#### Changed
-- 重构前端界面，使用 Element Plus 组件库
-- 优化配置项表单验证和错误处理
-- 改进配置项值的展示格式
-
-#### Fixed
-- 修复前端构建问题
-- 修复后端 API 跨域配置
 

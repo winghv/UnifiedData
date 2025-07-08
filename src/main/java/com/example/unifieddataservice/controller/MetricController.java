@@ -8,6 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
+import com.example.unifieddataservice.model.MetricInfo;
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/metrics")
 public class MetricController {
@@ -18,6 +21,37 @@ public class MetricController {
     public MetricController(MetricService metricService) {
         this.metricService = metricService;
         logger.info("MetricController initialized with MetricService: {}", metricService != null ? "present" : "null");
+    }
+
+    @PostMapping
+    public ResponseEntity<MetricInfo> createMetric(@RequestBody MetricInfo metricInfo) {
+        MetricInfo createdMetric = metricService.saveMetric(metricInfo);
+        return new ResponseEntity<>(createdMetric, HttpStatus.CREATED);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<MetricInfo>> getAllMetrics() {
+        List<MetricInfo> metrics = metricService.getAllMetrics();
+        return new ResponseEntity<>(metrics, HttpStatus.OK);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<MetricInfo> getMetricById(@PathVariable Long id) {
+        return metricService.getMetricById(id)
+                .map(metricInfo -> new ResponseEntity<>(metricInfo, HttpStatus.OK))
+                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<MetricInfo> updateMetric(@PathVariable Long id, @RequestBody MetricInfo metricInfo) {
+        MetricInfo updatedMetric = metricService.updateMetric(id, metricInfo);
+        return new ResponseEntity<>(updatedMetric, HttpStatus.OK);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteMetric(@PathVariable Long id) {
+        metricService.deleteMetric(id);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
     @GetMapping(value = "/{metricName}", produces = "text/csv")
