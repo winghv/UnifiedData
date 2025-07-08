@@ -13,7 +13,7 @@ import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectItem;
-import org.apache.arrow.vector.VectorSchemaRoot;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
+import com.example.unifieddataservice.util.ArrowJoinUtil;
 
 /**
  * Parses simple SELECT statements and orchestrates metric fetch & join.
@@ -32,10 +33,12 @@ public class SqlQueryService {
     private static final Logger logger = LoggerFactory.getLogger(SqlQueryService.class);
     private final TableRegistry tableRegistry;
     private final MetricService metricService;
+    private final ArrowJoinUtil arrowJoinUtil;
 
-    public SqlQueryService(TableRegistry tableRegistry, MetricService metricService) {
+    public SqlQueryService(TableRegistry tableRegistry, MetricService metricService, ArrowJoinUtil arrowJoinUtil) {
         this.tableRegistry = tableRegistry;
         this.metricService = metricService;
+        this.arrowJoinUtil = arrowJoinUtil;
     }
 
     @org.springframework.cache.annotation.Cacheable(value = "queryResults", key = "#sql", sync = true)
@@ -62,7 +65,7 @@ public class SqlQueryService {
 
         // Join ArrowTables on primary keys from TableDefinition for high-performance merge
         List<UnifiedDataTable> tables = new ArrayList<>(fieldDataMap.values());
-        UnifiedDataTable joined = com.example.unifieddataservice.util.ArrowJoinUtil.joinOnKeys(
+        UnifiedDataTable joined = arrowJoinUtil.joinOnKeys(
                 tables,
                 plan.getTableDefinition().getPrimaryKeys()
         );

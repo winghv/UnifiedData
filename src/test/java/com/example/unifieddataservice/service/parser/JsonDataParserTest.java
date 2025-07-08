@@ -3,6 +3,7 @@ package com.example.unifieddataservice.service.parser;
 import com.example.unifieddataservice.model.DataType;
 import com.example.unifieddataservice.model.MetricInfo;
 import com.example.unifieddataservice.model.UnifiedDataTable;
+import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.*;
 
 import org.apache.arrow.vector.types.pojo.Schema;
@@ -22,10 +23,12 @@ class JsonDataParserTest {
 
     private JsonDataParser parser;
     private MetricInfo metricInfo;
+    private RootAllocator rootAllocator;
 
     @BeforeEach
     void setUp() {
-        parser = new JsonDataParser();
+        rootAllocator = new RootAllocator(Long.MAX_VALUE);
+        parser = new JsonDataParser(rootAllocator);
         metricInfo = new MetricInfo();
         // Setup default valid metric info
         metricInfo.setDataPath("/data");
