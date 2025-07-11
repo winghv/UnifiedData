@@ -50,13 +50,21 @@ Unified Data Service is a high-performance Spring Boot application designed to f
 ### 构建项目 / Build the Project
 
 ```bash
-mvn clean install
+# Using Maven Wrapper (recommended)
+./mvnw clean install
+
+# Or using Maven directly
+# mvn clean install
 ```
 
 ### 运行应用 / Run the Application
 
 ```bash
-mvn spring-boot:run
+# Using Maven Wrapper (recommended)
+./mvnw spring-boot:run
+
+# Or using Maven directly
+# mvn spring-boot:run
 ```
 
 应用将在 `http://localhost:8080` 启动 / The application will start at `http://localhost:8080`
@@ -64,14 +72,16 @@ mvn spring-boot:run
 ## 📚 技术栈 / Tech Stack
 
 - **核心框架 / Core Framework**
-  - Java 17
+  - Java 17 (Required for parameter name retention in Spring Cache)
   - Spring Boot 3.2.5
+  - Spring Cache with Caffeine (with parameter name retention enabled)
   - Spring Data JPA
   - Spring Cache (Caffeine)
   - JSqlParser (SQL 解析)
 
 - **数据处理 / Data Processing**
   - Apache Arrow 15.0.0 (列式存储与处理 / Columnar storage and processing)
+  - Field type mapping support for logical tables
   - Jackson (JSON 处理 / JSON processing)
   - Apache Commons CSV (CSV 处理 / CSV processing)
 
@@ -173,34 +183,6 @@ curl "http://localhost:8080/api/metrics/sample_json_metric?filter=age > 30"
 
 # 获取美国地区用户数据 / Get users from US region
 curl "http://localhost:8080/api/metrics/sample_json_metric?filter=region == 'US'"
-```
-
-## 项目结构 / Project Structure
-
-```
-src/main/java/com/example/unifieddataservice/
-├── UnifiedDataServiceApplication.java  # 应用入口 / Application entry point
-├── config/                     # 配置类 / Configuration classes
-│   └── ArrowConfig.java        # Apache Arrow 配置 / Apache Arrow configuration
-├── controller/                 # Web 控制器 / Web controllers
-│   ├── MetricController.java   # 指标API控制器 / Metric API controller
-│   └── QueryController.java    # SQL查询API控制器 / SQL Query API controller
-├── model/                      # 数据模型 / Data models
-│   ├── MetricInfo.java         # 指标定义 / Metric definition
-│   ├── TableDefinition.java    # 逻辑表定义 / Logical table definition
-│   └── UnifiedDataTable.java   # 统一数据表 / Unified data table
-├── repository/                 # 数据访问层 / Data access layer
-│   └── MetricInfoRepository.java # 指标仓库 / Metric repository
-├── service/                    # 业务逻辑 / Business logic
-│   ├── MetricService.java      # 指标服务 / Metric service
-│   ├── SqlQueryService.java    # SQL查询服务 / SQL query service
-│   ├── TableRegistry.java      # 逻辑表注册中心 / Table registry
-│   └── parser/                 # 数据解析器 / Data parsers
-│       ├── CsvDataParser.java  # CSV解析器 / CSV parser
-│       ├── DataParser.java     # 解析器接口 / Parser interface
-│       └── JsonDataParser.java # JSON解析器 / JSON parser
-└── util/                       # 工具类 / Utilities
-    └── ArrowJoinUtil.java      # Arrow表连接工具 / Arrow table join utility
 ```
 
 ## 📜 更新日志 / Changelog

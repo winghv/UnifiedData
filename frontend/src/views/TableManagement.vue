@@ -12,6 +12,7 @@
         <el-table-column prop="tableName" label="Table Name" width="200"></el-table-column>
         <el-table-column prop="primaryKeys" label="Primary Keys" :formatter="row => row.primaryKeys.join(', ')"></el-table-column>
         <el-table-column prop="timeGranularity" label="Time Granularity" width="180"></el-table-column>
+        <el-table-column prop="metricFields" label="Metric Fields" :formatter="formatMetricFields"></el-table-column>
         <el-table-column label="Actions" width="180">
           <template #default="scope">
             <el-button size="small" @click="handleEdit(scope.row)">Edit</el-button>
@@ -37,7 +38,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="Metric Field Mappings">
-          <pre>{{ form.metricFieldMappings }}</pre>
+          <pre>{{ form.metricFields }}</pre>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -62,11 +63,18 @@ const form = ref({
   id: null,
   tableName: '',
   primaryKeys: [],
-  metricFieldMappings: {},
+  metricFields: {},
   timeGranularity: 'DAY'
 });
 // Helper for comma-separated string editing of primary keys
 const primaryKeys_str = ref('');
+const formatMetricFields = (row) => {
+  if (!row.metricFields) return '';
+  return Object.entries(row.metricFields)
+    .map(([field, metric]) => `${metric} -> ${field}`)
+    .join(', ');
+};
+
 watch(() => form.value.primaryKeys, (newVal) => {
   primaryKeys_str.value = newVal.join(', ');
 });
@@ -88,7 +96,7 @@ const handleAdd = () => {
     id: null,
     tableName: '',
     primaryKeys: [],
-    metricFieldMappings: { 'metric_name': 'field_name' },
+    metricFields: { 'field_name': 'metric_name' },
     timeGranularity: 'DAY'
   };
   primaryKeys_str.value = '';

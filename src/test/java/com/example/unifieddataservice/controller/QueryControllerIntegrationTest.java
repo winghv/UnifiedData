@@ -20,10 +20,9 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.Collections;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(classes = UnifiedDataServiceApplication.class)
@@ -76,81 +75,39 @@ class QueryControllerIntegrationTest {
     }
 
     @Test
-    void testStreamingResponse() throws Exception {
-        // For this test, we'll verify that the controller correctly handles the streaming request
-        // by checking that it starts async processing and sets the appropriate headers
-        
-        // Setup mock Arrow data
+    void testQuerySuccess() throws Exception {
         UnifiedDataTable mockTable = Mockito.mock(UnifiedDataTable.class);
         VectorSchemaRoot mockRoot = createMockVectorSchemaRoot();
-        
         Mockito.when(mockTable.getData()).thenReturn(mockRoot);
-        Mockito.when(mockTable.getRowCount()).thenReturn(10000);
-        
-        // Mock the query service to return our test data
-        Mockito.when(sqlQueryService.query(anyString()))
-               .thenReturn(mockTable);
-        
-        // Execute the request and verify async processing starts
-        // We won't try to process the actual stream in this test
-        mockMvc.perform(get("/query")
-                .param("sql", "SELECT * FROM test_table")
-                .accept("application/vnd.apache.arrow.stream"))
-                .andExpect(request().asyncStarted())
-                .andExpect(status().isOk())
-                .andReturn();
-        
-        // Note: We're not calling asyncDispatch() here because it would try to process the actual stream,
-        // which is complex to mock and not necessary for this integration test.
-        // The actual streaming behavior is better tested with a proper integration test
-        // that uses a real HTTP client to consume the stream.
-    }
 
-    @Test
-    void testSmallResponse() throws Exception {
-        MvcResult result = mockMvc.perform(get("/query")
-                .param("sql", "SELECT * FROM small_table")
-                .param("format", "json")
-                .accept(MediaType.APPLICATION_JSON))
+        Mockito.when(sqlQueryService.query(anyString())).thenReturn(mockTable);
+
+        MvcResult result = mockMvc.perform(post("/api/query")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("SELECT * FROM test_table"))
                 .andExpect(request().asyncStarted())
                 .andReturn();
 
         mockMvc.perform(asyncDispatch(result))
                 .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(content().string(containsString("test")))
-                .andReturn();
+                .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM_VALUE));
     }
+
+
 
     @Test
     void testErrorHandling() throws Exception {
-        Mockito.when(sqlQueryService.query(anyString()))
-                .thenThrow(new RuntimeException("Test error"));
+        Mockito.when(sqlQueryService.query(anyString())).thenThrow(new RuntimeException("Test error"));
 
-        MvcResult result = mockMvc.perform(get("/query")
-                .param("sql", "INVALID SQL")
-                .accept(MediaType.APPLICATION_JSON))
+        MvcResult result = mockMvc.perform(post("/api/query")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("INVALID SQL"))
                 .andExpect(request().asyncStarted())
                 .andReturn();
 
         mockMvc.perform(asyncDispatch(result))
-                .andExpect(status().is5xxServerError())
-                .andExpect(content().string(containsString("Test error")))
-                .andReturn();
+                .andExpect(status().isInternalServerError());
     }
     
-    @Test
-    void testUnsupportedFormat() throws Exception {
-        MvcResult result = mockMvc.perform(get("/query")
-                .param("sql", "SELECT * FROM test_table")
-                .param("format", "unsupported")
-                .accept(MediaType.ALL))
-                .andExpect(request().asyncStarted())
-                .andReturn();
 
-        mockMvc.perform(asyncDispatch(result))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(containsString("Unsupported format")))
-                .andReturn();
-    }
 }

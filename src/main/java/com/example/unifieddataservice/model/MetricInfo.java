@@ -31,4 +31,10 @@ public class MetricInfo {
     @Enumerated(EnumType.STRING)
     @Column(name = "data_type")
     private Map<String, DataType> fieldMappings;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "metric_column_aliases", joinColumns = @JoinColumn(name = "metric_id"))
+    @MapKeyColumn(name = "source_column")
+    @Column(name = "alias_column")
+    private Map<String, String> columnAlias; // e.g. {"stk_id": "stkcode"}
 }

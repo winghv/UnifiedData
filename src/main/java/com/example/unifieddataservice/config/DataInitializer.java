@@ -6,6 +6,8 @@ import com.example.unifieddataservice.model.DataType;
 import com.example.unifieddataservice.model.MetricInfo;
 import com.example.unifieddataservice.repository.ConfigurationRepository;
 import com.example.unifieddataservice.repository.MetricInfoRepository;
+import com.example.unifieddataservice.repository.TableDefinitionRepository;
+import com.example.unifieddataservice.model.TableDefinition;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -16,10 +18,14 @@ public class DataInitializer implements CommandLineRunner {
 
     private final MetricInfoRepository metricInfoRepository;
     private final ConfigurationRepository configurationRepository;
+    private final TableDefinitionRepository tableDefinitionRepository;
 
-    public DataInitializer(MetricInfoRepository metricInfoRepository, ConfigurationRepository configurationRepository) {
+    public DataInitializer(MetricInfoRepository metricInfoRepository,
+                           ConfigurationRepository configurationRepository,
+                           TableDefinitionRepository tableDefinitionRepository) {
         this.metricInfoRepository = metricInfoRepository;
         this.configurationRepository = configurationRepository;
+        this.tableDefinitionRepository = tableDefinitionRepository;
     }
 
     @Override
@@ -31,7 +37,7 @@ public class DataInitializer implements CommandLineRunner {
             stockData.setName("stock_data");
             stockData.setDataSourceType(DataSourceType.FILE_CSV);
             stockData.setSourceUrl("/Users/mac/VscodeProjects/UnifiedData/sample-data/stock_data.csv");
-            stockData.setDataPath(""); // CSV无需dataPath
+            stockData.setDataPath(""); // CSV does not need dataPath
             stockData.setFieldMappings(Map.of(
                 "stkcode", DataType.STRING,
                 "timestamp", DataType.LONG,
@@ -110,10 +116,40 @@ public class DataInitializer implements CommandLineRunner {
             // Market Data Refresh Interval
             Configuration refreshConfig = new Configuration();
             refreshConfig.setName("DataRefreshConfig");
-            refreshConfig.setConfigType("SystemConfig");
-            refreshConfig.setConfigValue("{\"intervalMinutes\":5,\"marketHoursOnly\":true,\"preMarket\":false,\"afterHours\":false}");
-            refreshConfig.setDescription("Configuration for data refresh intervals and market hours");
+            refreshConfig.setConfigType("Scheduler");
+            refreshConfig.setConfigValue("{\"intervalMinutes\":15}");
+            refreshConfig.setDescription("Configuration for data refresh intervals");
             configurationRepository.save(refreshConfig);
+        }
+
+        // Initialize TableDefinition data if the table is empty
+        if (tableDefinitionRepository.count() == 0) {
+            TableDefinition stockQuoteTable = new TableDefinition();
+            stockQuoteTable.setTableName("stock_quote");
+            stockQuoteTable.setPrimaryKeys(java.util.Arrays.asList("ticker", "date"));
+
+            stockQuoteTable.setMetricFields(Map.of(
+                "ticker", "stock_data",
+                "date", "stock_data",
+                "price", "stock_data",
+                "volume", "stock_data"
+            ));
+
+            stockQuoteTable.setFieldMapping(Map.of(
+                "ticker", "stkcode",
+                "date", "timestamp",
+                "price", "close",
+                "volume", "volume"
+            ));
+
+            stockQuoteTable.setFieldTypes(Map.of(
+                "ticker", DataType.STRING,
+                "date", DataType.LONG,
+                "price", DataType.DOUBLE,
+                "volume", DataType.LONG
+            ));
+
+            tableDefinitionRepository.save(stockQuoteTable);
         }
     }
 }

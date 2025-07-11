@@ -23,7 +23,7 @@ public class CacheConfig {
     @Bean
     @Primary
     public CacheManager cacheManager() {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager("metrics");
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager("metrics", "queryResults");
         
         // Create a type-safe Caffeine cache configuration
         Caffeine<Object, Object> caffeine = Caffeine.newBuilder()

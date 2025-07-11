@@ -42,5 +42,26 @@ public class TableDefinition {
     @Column(name = "metric_name")
     private Map<String, String> metricFields;
 
+    /**
+     * logicalFieldName -> physicalFieldName mapping.
+     * e.g. { "price": "close", "ticker": "stkcode" }
+     */
+    @ElementCollection
+    @CollectionTable(name = "table_field_mappings", joinColumns = @JoinColumn(name = "table_id"))
+    @MapKeyColumn(name = "logical_field_name")
+    @Column(name = "physical_field_name")
+    private Map<String, String> fieldMapping;
+
+    /**
+     * logicalFieldName -> dataType mapping.
+     * e.g. { "price": DataType.DOUBLE, "ticker": DataType.STRING }
+     */
+    @ElementCollection
+    @CollectionTable(name = "table_field_types", joinColumns = @JoinColumn(name = "table_id"))
+    @MapKeyColumn(name = "logical_field_name")
+    @Column(name = "data_type")
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    private Map<String, DataType> fieldTypes;
+
     private TimeGranularity timeGranularity;
 }
