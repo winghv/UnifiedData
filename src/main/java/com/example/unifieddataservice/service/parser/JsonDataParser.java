@@ -18,10 +18,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Component
@@ -82,9 +79,14 @@ public class JsonDataParser implements DataParser {
     }
     
     private UnifiedDataTable createEmptyTable(Map<String, DataType> fieldMappings) {
+        // Create the schema based on fieldMappings (using logical field names, not physical column names)
         Map<String, Field> arrowFields = DataTypeMapper.toArrowFields(fieldMappings);
         List<Field> fields = new ArrayList<>(arrowFields.values());
         Schema schema = new Schema(fields, null);
+        
+        // Log the schema for debugging
+        logger.debug("Created Arrow schema with fields: {}", 
+            fields.stream().map(Field::getName).collect(Collectors.toList()));
         VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, rootAllocator);
         vectorSchemaRoot.allocateNew();
         vectorSchemaRoot.setRowCount(0);
@@ -92,11 +94,24 @@ public class JsonDataParser implements DataParser {
     }
 
     @Override
-    public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath) {
-        logger.info("Starting JSON parsing with dataPath: '{}' and fieldMappings: {}", dataPath, fieldMappings);
+    public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath, Map<String, String> columnAlias) {
+        logger.info("Starting JSON parsing with dataPath: '{}', fieldMappings: {}, columnAlias: {}", 
+            dataPath, fieldMappings, columnAlias);
         
         Objects.requireNonNull(data, "Input stream cannot be null");
         Objects.requireNonNull(fieldMappings, "Field mappings cannot be null");
+        
+        // Use the columnAlias map if provided, otherwise use an empty map
+        Map<String, String> aliasMap = columnAlias != null ? columnAlias : Collections.emptyMap();
+        
+        // Create a mapping from logical field names to physical column names
+        Map<String, String> fieldToColumnMap = new HashMap<>();
+        
+        // For each field, determine its physical column name (using alias if available)
+        for (String fieldName : fieldMappings.keySet()) {
+            // If there's an alias for this field, use it; otherwise use the field name as is
+            fieldToColumnMap.put(fieldName, aliasMap.getOrDefault(fieldName, fieldName));
+        }
         
         if (fieldMappings.isEmpty()) {
             String errorMsg = "Field mappings cannot be empty";
@@ -127,25 +142,24 @@ public class JsonDataParser implements DataParser {
             
             logger.debug("Successfully parsed JSON. Root node type: {}", rootNode.getNodeType());
             
-            // If dataPath is provided, navigate to the target node
-            JsonNode dataNode = rootNode;
+            // If dataPath is provided, use it to navigate to the data array
+            JsonNode dataNode;
             if (dataPath != null && !dataPath.isEmpty()) {
-                logger.debug("Navigating to dataPath: {}", dataPath);
                 JsonPointer pointer = JsonPointer.compile(dataPath);
                 dataNode = rootNode.at(pointer);
-                
-                if (dataNode.isMissingNode()) {
-                    String errorMsg = String.format("Data path '%s' not found in JSON", dataPath);
-                    logger.error(errorMsg);
-                    throw new IllegalArgumentException(errorMsg);
-                }
-                logger.debug("Node after applying dataPath - type: {}, isArray: {}", 
-                           dataNode.getNodeType(), dataNode.isArray());
+                logger.debug("Navigated to data path '{}', found node type: {}", dataPath, dataNode.getNodeType());
+            } else {
+                dataNode = rootNode;
             }
             
             if (!dataNode.isArray()) {
-                logger.error("JSON data must be an array. Found type: {}", dataNode.getNodeType());
-                throw new IllegalArgumentException("JSON data must be an array. Found: " + dataNode.getNodeType());
+                logger.error("Data at path '{}' is not an array. Node type: {}", dataPath, dataNode.getNodeType());
+                return createEmptyTable(fieldMappings);
+            }
+            
+            // Log the first item's structure for debugging
+            if (dataNode.size() > 0) {
+                logger.debug("First item structure: {}", dataNode.get(0).toPrettyString());
             }
             
             int rowCount = dataNode.size();
@@ -180,36 +194,45 @@ public class JsonDataParser implements DataParser {
             
             // Process each row
             for (int i = 0; i < rowCount; i++) {
-                JsonNode rowNode = dataNode.get(i);
-                if (!rowNode.isObject()) {
+                JsonNode itemNode = dataNode.get(i);
+                if (!itemNode.isObject()) {
                     logger.warn("Skipping non-object row at index {}", i);
                     continue;
                 }
                 
-                final int rowIndex = i;
-                fieldMappings.forEach((fieldName, dataType) -> {
+                // Process each field in the fieldMappings
+                for (Map.Entry<String, DataType> entry : fieldMappings.entrySet()) {
+                    String fieldName = entry.getKey();
+                    DataType dataType = entry.getValue();
+                    
+                    // Get the physical column name (using alias if available)
+                    String physicalColumn = fieldToColumnMap.get(fieldName);
+                    
+                    // Get the field value from the JSON object using the physical column name
+                    JsonNode valueNode = itemNode.path(physicalColumn);
+                    
+                    // Log if the field is missing or null
+                    if (valueNode.isMissingNode() || valueNode.isNull()) {
+                        logger.trace("Field '{}' (mapped from '{}') is missing or null in item {}", 
+                            physicalColumn, fieldName, i);
+                    }
+                    
                     try {
                         FieldVector vector = vectorSchemaRoot.getVector(fieldName);
                         if (vector == null) {
                             logger.error("No vector found for field: {}", fieldName);
-                            return;
+                            continue;
                         }
                         
-                        JsonNode cellNode = rowNode.get(fieldName);
-                        if (cellNode == null || cellNode.isNull()) {
-                            logger.trace("Null value for field {} at row {}", fieldName, rowIndex);
-                            return;
-                        }
-                        
-                        setVectorValue(vector, dataType, rowIndex, cellNode);
+                        setVectorValue(vector, dataType, i, valueNode);
                     } catch (Exception e) {
-                        logger.error("Error processing field '{}' at row {}: {}", fieldName, rowIndex, e.getMessage(), e);
+                        logger.error("Error processing field '{}' at row {}: {}", fieldName, i, e.getMessage(), e);
                         if (e instanceof RuntimeException) {
                             throw (RuntimeException) e;
                         }
-                        throw new RuntimeException(String.format("Error processing field '%s' at row %d", fieldName, rowIndex), e);
+                        throw new RuntimeException(String.format("Error processing field '%s' at row %d", fieldName, i), e);
                     }
-                });
+                }
             }
             
             vectorSchemaRoot.setRowCount(rowCount);

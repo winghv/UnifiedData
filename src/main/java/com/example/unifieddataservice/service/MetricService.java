@@ -143,12 +143,16 @@ public class MetricService {
                 DataParser parser = getParser(metricInfo.getDataSourceType());
                 logger.debug("Using parser: {}", parser.getClass().getSimpleName());
                 
-                // Parse the data
+                // Parse the data with column aliases
                 UnifiedDataTable result = parser.parse(
                     dataStream, 
                     metricInfo.getFieldMappings(), 
-                    metricInfo.getDataPath()
+                    metricInfo.getDataPath(),
+                    metricInfo.getColumnAlias()
                 );
+                
+                logger.debug("Parsed data with {} rows and column aliases: {}", 
+                    result.getRowCount(), metricInfo.getColumnAlias());
                 
                 if (result == null) {
                     String errorMsg = String.format("Parser returned null for metric: %s", metricName);
