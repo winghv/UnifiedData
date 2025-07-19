@@ -46,6 +46,7 @@ target/
 
 # Mac OS X
 .DS_Store
+.env
 
 # Application specific
 *.arrow

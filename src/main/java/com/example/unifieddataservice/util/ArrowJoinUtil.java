@@ -5,11 +5,14 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.pojo.Field;
-
+import org.apache.arrow.vector.types.pojo.Schema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Utility for performing an in-memory hash join on multiple Arrow tables using equality on key columns.
@@ -18,7 +21,7 @@ import java.util.*;
  */
 @Component
 public class ArrowJoinUtil {
-
+    private static final Logger logger = LoggerFactory.getLogger(ArrowJoinUtil.class);
     private final RootAllocator rootAllocator;
 
     @Autowired
@@ -31,100 +34,132 @@ public class ArrowJoinUtil {
      * The first table is treated as the build (left) side, preserving its row order.
      *
      * @param tables list of UnifiedDataTable, size >= 1
-     * @param keyColumns list of column names that exist in every table
+     * @param keyColumns list of logical column names that exist in every table
+     * @param fieldMappings map of logical field names to physical field names
      * @return joined UnifiedDataTable
      */
-    public UnifiedDataTable joinOnKeys(List<UnifiedDataTable> tables, List<String> keyColumns) {
+    public UnifiedDataTable joinOnKeys(List<UnifiedDataTable> tables, List<String> keyColumns, Map<String, String> fieldMappings) {
+        logger.info("Starting joinOnKeys with {} tables and key columns: {}", tables.size(), keyColumns);
+
         if (tables == null || tables.isEmpty()) {
             throw new IllegalArgumentException("No tables provided for join");
         }
+
+        if (fieldMappings == null) {
+            fieldMappings = Collections.emptyMap();
+        }
+
+        final Map<String, String> reverseMappings = new HashMap<>();
+        fieldMappings.forEach((logical, physical) -> reverseMappings.put(physical, logical));
+
+        for (int i = 0; i < tables.size(); i++) {
+            VectorSchemaRoot data = tables.get(i).getData();
+            logger.info("Table {} schema: {}", i, data.getSchema().getFields().stream()
+                    .map(Field::toString)
+                    .collect(Collectors.joining(", ")));
+        }
+
         if (tables.size() == 1) {
             return tables.get(0);
         }
 
-        // Build map from key -> row index for each table (except first)
         List<Map<String, Integer>> tableKeyIndexMaps = new ArrayList<>();
         for (int i = 1; i < tables.size(); i++) {
-            tableKeyIndexMaps.add(buildKeyIndexMap(tables.get(i).getData(), keyColumns));
+            logger.info("Building key index map for table {}", i);
+            VectorSchemaRoot currentTable = tables.get(i).getData();
+            Map<String, Integer> keyIndexMap = buildKeyIndexMap(currentTable, keyColumns, fieldMappings);
+            logger.info("Built key index map with {} entries for table {}", keyIndexMap.size(), i);
+            tableKeyIndexMaps.add(keyIndexMap);
         }
 
         VectorSchemaRoot base = tables.get(0).getData();
         int rowCount = base.getRowCount();
+        logger.info("Base table has {} rows and {} columns", rowCount, base.getFieldVectors().size());
 
-        // Build combined schema: start with base, then add non-duplicate fields from others
-        List<Field> combinedFields = new ArrayList<>(base.getSchema().getFields());
+        List<Field> combinedFields = new ArrayList<>();
+        Map<String, String> fieldNameMapping = new HashMap<>();
+
+        for (Field field : base.getSchema().getFields()) {
+            combinedFields.add(field);
+            fieldNameMapping.put(field.getName(), field.getName());
+        }
+
         for (int i = 1; i < tables.size(); i++) {
-            for (Field f : tables.get(i).getData().getSchema().getFields()) {
-                if (combinedFields.stream().noneMatch(cf -> cf.getName().equals(f.getName()))) {
-                    combinedFields.add(f);
+            VectorSchemaRoot currentTable = tables.get(i).getData();
+            for (Field field : currentTable.getSchema().getFields()) {
+                String originalName = field.getName();
+                if (combinedFields.stream().noneMatch(f -> f.getName().equals(originalName))) {
+                    combinedFields.add(field);
                 }
             }
         }
 
-        VectorSchemaRoot joinedRoot = VectorSchemaRoot.create(new org.apache.arrow.vector.types.pojo.Schema(combinedFields), rootAllocator);
+        Schema finalSchema = new Schema(combinedFields);
+        VectorSchemaRoot joinedRoot = VectorSchemaRoot.create(finalSchema, rootAllocator);
         joinedRoot.allocateNew();
 
-        // Map field name -> FieldVector in joined root
         Map<String, FieldVector> joinedVectors = new HashMap<>();
         for (FieldVector fv : joinedRoot.getFieldVectors()) {
             joinedVectors.put(fv.getField().getName(), fv);
         }
 
-        // Copy base vectors first
-        for (FieldVector baseVec : base.getFieldVectors()) {
-            FieldVector target = joinedVectors.get(baseVec.getField().getName());
-            target.copyFromSafe(0, 0, baseVec); // allocate capacity first; copy row-by-row later
-        }
-
-        // Iterate rows of base table
         for (int row = 0; row < rowCount; row++) {
-            // Key extraction
-            String key = buildKeyString(base, keyColumns, row);
-            // Copy base row into target
-            for (FieldVector baseVec : base.getFieldVectors()) {
-                FieldVector target = joinedVectors.get(baseVec.getField().getName());
-                target.copyFromSafe(row, row, baseVec);
-            }
-            // For each other table, locate row and copy additional columns
+            String key = buildKeyString(base, keyColumns, row, fieldMappings);
+            boolean matchFound = true;
             for (int tIndex = 1; tIndex < tables.size(); tIndex++) {
-                Integer matchRow = tableKeyIndexMaps.get(tIndex - 1).get(key);
-                if (matchRow == null) {
-                    // inner join: skip row entirely; for simplicity we break and mark row invalid
-                    // In production, you'd implement outer joins or filtering before join
-                    continue;
+                if (!tableKeyIndexMaps.get(tIndex - 1).containsKey(key)) {
+                    matchFound = false;
+                    break;
                 }
-                VectorSchemaRoot otherRoot = tables.get(tIndex).getData();
-                for (FieldVector otherVec : otherRoot.getFieldVectors()) {
-                    if (joinedVectors.containsKey(otherVec.getField().getName())) {
-                        // if field exists in base, we skip duplicate
-                        continue;
-                    }
-                    FieldVector target = joinedVectors.get(otherVec.getField().getName());
-                    if (target == null) {
-                        target = joinedRoot.getVector(otherVec.getField().getName());
-                    }
-                    target.copyFromSafe(matchRow, row, otherVec);
+            }
+
+            if (matchFound) {
+                int newRowIndex = joinedRoot.getRowCount();
+                for (FieldVector baseVec : base.getFieldVectors()) {
+                    joinedVectors.get(baseVec.getField().getName()).copyFromSafe(row, newRowIndex, baseVec);
                 }
+
+                for (int tIndex = 1; tIndex < tables.size(); tIndex++) {
+                    Integer matchRow = tableKeyIndexMaps.get(tIndex - 1).get(key);
+                    VectorSchemaRoot otherRoot = tables.get(tIndex).getData();
+                    for (FieldVector otherVec : otherRoot.getFieldVectors()) {
+                        if (joinedVectors.containsKey(otherVec.getField().getName())) {
+                            joinedVectors.get(otherVec.getField().getName()).copyFromSafe(matchRow, newRowIndex, otherVec);
+                        }
+                    }
+                }
+                joinedRoot.setRowCount(newRowIndex + 1);
             }
         }
-        joinedRoot.setRowCount(rowCount);
         return new UnifiedDataTable(joinedRoot);
     }
-
-    private Map<String, Integer> buildKeyIndexMap(VectorSchemaRoot table, List<String> keyColumns) {
-        Map<String, Integer> map = new HashMap<>();
-        for (int row = 0; row < table.getRowCount(); row++) {
-            map.put(buildKeyString(table, keyColumns, row), row);
-        }
-        return map;
-    }
-
-    private String buildKeyString(VectorSchemaRoot table, List<String> keyColumns, int rowIndex) {
+    
+    private String buildKeyString(VectorSchemaRoot root, List<String> keyColumns, int row, Map<String, String> fieldMappings) {
         StringBuilder sb = new StringBuilder();
-        for (String col : keyColumns) {
-            FieldVector vec = table.getVector(col);
-            sb.append(vec.getObject(rowIndex)).append('|');
+        for (String logicalCol : keyColumns) {
+            String physicalCol = fieldMappings.getOrDefault(logicalCol, logicalCol);
+            FieldVector vector = root.getVector(physicalCol);
+            if (vector == null) {
+                throw new IllegalArgumentException("Key column '" + physicalCol + "' not found in vector schema root");
+            }
+            Object value = vector.getObject(row);
+            sb.append(value != null ? value.toString() : "NULL").append('|');
         }
         return sb.toString();
+    }
+    
+    private Map<String, Integer> buildKeyIndexMap(VectorSchemaRoot table, List<String> keyColumns, Map<String, String> fieldMappings) {
+        Map<String, Integer> keyIndexMap = new HashMap<>();
+        if (table == null || keyColumns == null || keyColumns.isEmpty()) {
+            return keyIndexMap;
+        }
+
+        for (int i = 0; i < table.getRowCount(); i++) {
+            String key = buildKeyString(table, keyColumns, i, fieldMappings);
+            if (!keyIndexMap.containsKey(key)) {
+                keyIndexMap.put(key, i);
+            }
+        }
+        return keyIndexMap;
     }
 }

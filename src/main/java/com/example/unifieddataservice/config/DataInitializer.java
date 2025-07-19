@@ -8,28 +8,46 @@ import com.example.unifieddataservice.repository.ConfigurationRepository;
 import com.example.unifieddataservice.repository.MetricInfoRepository;
 import com.example.unifieddataservice.repository.TableDefinitionRepository;
 import com.example.unifieddataservice.model.TableDefinition;
+import com.example.unifieddataservice.service.TableRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.event.ContextRefreshedEvent;
+import com.example.unifieddataservice.event.TableRegistryRefreshEvent;
 
 import java.util.Map;
 
 @Component
-public class DataInitializer implements CommandLineRunner {
+@Order(1) // Ensure this runs before other CommandLineRunner beans
+public class DataInitializer implements CommandLineRunner, ApplicationContextAware {
+    private static final Logger logger = LoggerFactory.getLogger(DataInitializer.class);
 
     private final MetricInfoRepository metricInfoRepository;
     private final ConfigurationRepository configurationRepository;
     private final TableDefinitionRepository tableDefinitionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public DataInitializer(MetricInfoRepository metricInfoRepository,
-                           ConfigurationRepository configurationRepository,
-                           TableDefinitionRepository tableDefinitionRepository) {
-        this.metricInfoRepository = metricInfoRepository;
+                         ConfigurationRepository configurationRepository,
+                         TableDefinitionRepository tableDefinitionRepository,
+                         ApplicationEventPublisher eventPublisher) {
+this.metricInfoRepository = metricInfoRepository;
         this.configurationRepository = configurationRepository;
         this.tableDefinitionRepository = tableDefinitionRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
+    @Transactional
     public void run(String... args) throws Exception {
+        logger.info("🚀 Starting DataInitializer...");
         // Initialize MetricInfo data if the table is empty
         if (metricInfoRepository.count() == 0) {
             // Metric 0: Stock Data (CSV from local file)
@@ -122,19 +140,24 @@ public class DataInitializer implements CommandLineRunner {
             configurationRepository.save(refreshConfig);
         }
 
-        // Initialize TableDefinition data if the table is empty
+        // Initialize Table Definitions if the table is empty
         if (tableDefinitionRepository.count() == 0) {
+            logger.info("📝 Initializing table definitions...");
+            
+            // Create and populate the stock_quote table definition
             TableDefinition stockQuoteTable = new TableDefinition();
             stockQuoteTable.setTableName("stock_quote");
             stockQuoteTable.setPrimaryKeys(java.util.Arrays.asList("ticker", "date"));
-
+            
+            // Set metric fields mapping
             stockQuoteTable.setMetricFields(Map.of(
-                "ticker", "stock_data",
-                "date", "stock_data",
-                "price", "stock_data",
-                "volume", "stock_data"
+                "ticker", "stock_data",  // Basic stock info
+                "date", "stock_data",    // Timestamp
+                "price", "stock_price",  // Price-specific metric
+                "volume", "stock_volume" // Volume-specific metric
             ));
 
+            // Set field mappings
             stockQuoteTable.setFieldMapping(Map.of(
                 "ticker", "stkcode",
                 "date", "timestamp",
@@ -142,6 +165,7 @@ public class DataInitializer implements CommandLineRunner {
                 "volume", "volume"
             ));
 
+            // Set field data types
             stockQuoteTable.setFieldTypes(Map.of(
                 "ticker", DataType.STRING,
                 "date", DataType.LONG,
@@ -149,7 +173,52 @@ public class DataInitializer implements CommandLineRunner {
                 "volume", DataType.LONG
             ));
 
+            // Add new metrics for price and volume
+            MetricInfo stockPrice = new MetricInfo();
+            stockPrice.setName("stock_price");
+            stockPrice.setDataSourceType(DataSourceType.FILE_CSV);
+            stockPrice.setSourceUrl("/Users/mac/VscodeProjects/UnifiedData/sample-data/stock_price.csv");
+            stockPrice.setDataPath("");
+            stockPrice.setFieldMappings(Map.of(
+                "stkcode", DataType.STRING,
+                "timestamp", DataType.LONG,
+                "close", DataType.DOUBLE
+            ));
+            stockPrice.setColumnAlias(Map.of("ticker", "stkcode"));
+            metricInfoRepository.save(stockPrice);
+
+            MetricInfo stockVolume = new MetricInfo();
+            stockVolume.setName("stock_volume");
+            stockVolume.setDataSourceType(DataSourceType.FILE_CSV);
+            stockVolume.setSourceUrl("/Users/mac/VscodeProjects/UnifiedData/sample-data/stock_volume.csv");
+            stockVolume.setDataPath("");
+            stockVolume.setFieldMappings(Map.of(
+                "stkcode", DataType.STRING,
+                "timestamp", DataType.LONG,
+                "volume", DataType.LONG
+            ));
+            stockVolume.setColumnAlias(Map.of("ticker", "stkcode"));
+            metricInfoRepository.save(stockVolume);
+
+            // The stockQuoteTable is already defined above with all necessary configurations
+
+            // Save the table definition
             tableDefinitionRepository.save(stockQuoteTable);
+            logger.info("✅ Saved table definition for 'stock_quote'");
+            
+            // Force flush to ensure data is persisted before refreshing the cache
+            tableDefinitionRepository.flush();
+            
+            // Publish an event to refresh the TableRegistry after the context is refreshed
+            logger.info("🔄 Publishing TableRegistryRefreshEvent to refresh cache after context is ready...");
+            eventPublisher.publishEvent(new TableRegistryRefreshEvent(this));
         }
+        
+        logger.info("🏁 DataInitializer completed successfully");
+    }
+    
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) {
+        // Implementation required by ApplicationContextAware
     }
 }

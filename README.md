@@ -6,39 +6,10 @@
 
 ## 📖 概述 / Overview
 
-Unified Data Service is a high-performance Spring Boot application designed to fetch, parse, filter, and serve metric data from various sources. It leverages Apache Arrow for efficient in-memory columnar data processing, providing a fast and scalable solution for data unification.
+**统一数据服务 (Unified Data Service)** 是一个高性能、配置驱动的Java数据集成平台。它旨在解决企业在面对异构数据源（如JSON、CSV、数据库等）时遇到的数据孤岛问题。通过将不同来源的数据实时转化为标准化的 **Apache Arrow** 内存格式，并提供统一的 **SQL查询** 和 **指标访问** 接口，本服务极大简化了数据消费和分析的复杂度。
 
-统一数据服务是一个基于 Java 的数据服务，旨在从多种异构数据源（如提供 JSON 或 CSV 的 HTTP 接口）获取、处理并统一数据。它将不同来源的数据转换为一致的中间格式（Apache Arrow Table），并通过统一的查询接口提供服务。
+核心价值在于 **“一次配置，处处查询”**。业务人员或数据分析师无需编写任何代码，仅通过在数据库中定义数据源和逻辑表，即可快速将新的数据资产纳入平台，并通过标准SQL进行连接、过滤和聚合查询。这不仅提升了数据接入的敏捷性，还通过 **Apache Arrow** 的列式内存处理和 **Caffeine** 缓存机制，确保了查询的高性能和低延迟，为下游应用（如BI报表、机器学习、实时监控）提供了稳定、高效的数据支持。
 
-## ✨ 核心优势 / Key Features
-
-- **配置驱动 / Configuration-Driven**
-  - 无需修改代码，仅通过在数据库中添加元数据定义，即可动态接入新的数据指标
-  - No code changes needed, dynamically integrate new data metrics by adding metadata definitions to the database
-
-- **SQL 查询接口 / SQL Query Interface**
-  - 支持标准 SQL 语法查询逻辑表数据
-  - Supports standard SQL syntax for querying logical tables
-  - 自动将 SQL 查询转换为底层指标查询计划
-  - Automatically translates SQL queries to underlying metric query plans
-
-- **逻辑表抽象 / Logical Table Abstraction**
-  - 将多个指标组织为逻辑表，支持表连接和复杂查询
-  - Organizes multiple metrics into logical tables with support for joins and complex queries
-  - 支持按时间和代码分区，优化查询性能
-  - Supports partitioning by time and code for optimized query performance
-
-- **高性能 / High Performance**
-  - 使用 Apache Arrow 进行高效的内存列式数据处理
-  - Efficient in-memory columnar data processing with Apache Arrow
-  - 基于 Caffeine 的缓存层，提高重复查询性能
-  - Caffeine-based caching layer for improved performance on repeated queries
-  - 流式处理大型结果集，降低内存占用
-  - Streaming of large result sets to reduce memory footprint
-
-- **统一与标准化 / Unification & Standardization**
-  - 将多格式的外部数据源统一清洗为标准化的中间数据结构
-  - Unify and clean multi-format data sources into standardized intermediate data structures
 
 ## 🚀 快速开始 / Quick Start
 
@@ -46,28 +17,44 @@ Unified Data Service is a high-performance Spring Boot application designed to f
 
 - Java 17 或更高版本 / JDK 17 or later
 - Apache Maven 3.6+
+- Node.js 16+ (for frontend)
+- npm 7+ (for frontend)
 
-### 构建项目 / Build the Project
+### 服务启动流程 / Service Startup Process
 
-```bash
-# Using Maven Wrapper (recommended)
-./mvnw clean install
-
-# Or using Maven directly
-# mvn clean install
-```
-
-### 运行应用 / Run the Application
+#### 1. 后端服务启动 / Backend Service Startup
 
 ```bash
-# Using Maven Wrapper (recommended)
+# 使用 Maven Wrapper (推荐)
 ./mvnw spring-boot:run
 
-# Or using Maven directly
+# 或者直接使用 Maven
 # mvn spring-boot:run
 ```
 
-应用将在 `http://localhost:8080` 启动 / The application will start at `http://localhost:8080`
+后端服务将在 `http://localhost:8080` 启动
+The backend service will start at `http://localhost:8080`
+
+#### 2. 前端服务启动 / Frontend Service Startup
+
+```bash
+# 进入前端目录
+cd frontend
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+前端服务将在 `http://localhost:5173` 启动
+The frontend service will start at `http://localhost:5173`
+
+### 服务访问地址 / Service Access URLs
+
+- 后端 API: `http://localhost:8080`
+- 前端界面: `http://localhost:5173`
 
 ## 📚 技术栈 / Tech Stack
 
