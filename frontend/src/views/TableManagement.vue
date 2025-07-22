@@ -12,7 +12,15 @@
         <el-table-column prop="tableName" label="Table Name" width="200"></el-table-column>
         <el-table-column prop="primaryKeys" label="Primary Keys" :formatter="row => row.primaryKeys.join(', ')"></el-table-column>
         <el-table-column prop="timeGranularity" label="Time Granularity" width="180"></el-table-column>
-        <el-table-column prop="metricFields" label="Metric Fields" :formatter="formatMetricFields"></el-table-column>
+        <el-table-column label="Fields" width="600">
+          <template #default="scope">
+            <el-table :data="getFields(scope.row)" style="width: 100%" :show-header="false">
+              <el-table-column prop="field" label="Field" width="200"></el-table-column>
+              <el-table-column prop="metric" label="Metric" width="200"></el-table-column>
+              <el-table-column prop="type" label="Type" width="200"></el-table-column>
+            </el-table>
+          </template>
+        </el-table-column>
         <el-table-column label="Actions" width="180">
           <template #default="scope">
             <el-button size="small" @click="handleEdit(scope.row)">Edit</el-button>
@@ -68,11 +76,49 @@ const form = ref({
 });
 // Helper for comma-separated string editing of primary keys
 const primaryKeys_str = ref('');
+const formatFieldMappings = (row) => {
+  if (!row.fieldMapping) return '';
+  return Object.entries(row.fieldMapping)
+    .map(([logical, physical]) => `${logical} -> ${physical}`)
+    .join(', ');
+};
+
 const formatMetricFields = (row) => {
   if (!row.metricFields) return '';
   return Object.entries(row.metricFields)
-    .map(([field, metric]) => `${metric} -> ${field}`)
+    .map(([field, metric]) => `${field} -> ${metric}`)
     .join(', ');
+};
+
+const formatFieldTypes = (row) => {
+  if (!row.fieldTypes) return '';
+  return Object.entries(row.fieldTypes)
+    .map(([field, type]) => `${field}: ${type}`)
+    .join(', ');
+};
+
+const getFields = (row) => {
+  const fields = [];
+  if (!row.metricFields || !row.fieldTypes) return fields;
+  
+  // Get unique fields
+  const uniqueFields = new Set(Object.keys(row.metricFields));
+  
+  uniqueFields.forEach(field => {
+    const metrics = row.metricFields[field];
+    const type = row.fieldTypes[field] || 'N/A';
+    
+    // If multiple metrics for a field, join them with comma
+    const metricDisplay = Array.isArray(metrics) ? metrics.join(', ') : metrics;
+    
+    fields.push({
+      field,
+      metric: metricDisplay,
+      type
+    });
+  });
+  
+  return fields;
 };
 
 watch(() => form.value.primaryKeys, (newVal) => {

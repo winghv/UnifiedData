@@ -16,9 +16,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Component
@@ -32,11 +30,23 @@ public class CsvDataParser implements DataParser {
     }
 
     @Override
-    public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath) {
+    public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath, Map<String, String> columnAlias) {
+        // Use the columnAlias map if provided, otherwise use an empty map
+        Map<String, String> aliasMap = columnAlias != null ? columnAlias : Collections.emptyMap();
+
+        // Create a mapping from logical field names to physical column names
+        Map<String, String> fieldToColumnMap = new HashMap<>();
+
+        // For each field, determine its physical column name (using alias if available)
+        for (String fieldName : fieldMappings.keySet()) {
+            // If there's an alias for this field, use it; otherwise use the field name as is
+            fieldToColumnMap.put(fieldName, aliasMap.getOrDefault(fieldName, fieldName));
+        }
+
         // Validate input parameters
         Objects.requireNonNull(data, "Input stream cannot be null");
         Objects.requireNonNull(fieldMappings, "Field mappings cannot be null");
-        
+
         if (fieldMappings.isEmpty()) {
             throw new IllegalArgumentException("Field mappings cannot be empty");
         }
@@ -50,17 +60,25 @@ public class CsvDataParser implements DataParser {
             }
 
             Map<String, Integer> headerMap = csvParser.getHeaderMap();
-            
+
             // Validate all required fields are present in the CSV
-            for (String requiredField : fieldMappings.keySet()) {
-                if (!headerMap.containsKey(requiredField)) {
-                    throw new IllegalArgumentException("Required header '" + requiredField + "' not found in CSV.");
+            for (Map.Entry<String, String> entry : fieldToColumnMap.entrySet()) {
+                String logicalField = entry.getKey();
+                String physicalColumn = entry.getValue();
+
+                if (!headerMap.containsKey(physicalColumn)) {
+                    throw new IllegalArgumentException(String.format(
+                            "Required column '%s' (mapped from field '%s') not found in CSV. Available columns: %s",
+                            physicalColumn, logicalField, headerMap.keySet()));
                 }
             }
 
-            List<Field> fields = fieldMappings.entrySet().stream()
-                .map(entry -> DataTypeMapper.toArrowFields(fieldMappings).get(entry.getKey()))
-                .collect(Collectors.toList());
+            // Create the map of fields once and reuse it
+            Map<String, Field> arrowFields = DataTypeMapper.toArrowFields(fieldMappings);
+            List<Field> fields = fieldMappings.keySet().stream()
+                    .map(arrowFields::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
 
             Schema schema = new Schema(fields, null);
             VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, rootAllocator);
@@ -70,10 +88,14 @@ public class CsvDataParser implements DataParser {
             for (int i = 0; i < records.size(); i++) {
                 CSVRecord record = records.get(i);
                 final int rowIndex = i;
+
                 fieldMappings.forEach((fieldName, dataType) -> {
                     try {
                         FieldVector vector = vectorSchemaRoot.getVector(fieldName);
-                        String value = record.get(fieldName);
+                        // Use the mapped column name to get the value from the CSV record
+                        String physicalColumn = fieldToColumnMap.get(fieldName);
+                        String value = record.get(physicalColumn);
+
                         if (value != null && !value.trim().isEmpty()) {
                             try {
                                 switch (dataType) {
@@ -108,9 +130,10 @@ public class CsvDataParser implements DataParser {
                                             vector.setNull(rowIndex);
                                         }
                                         break;
+                                    default:
+                                        throw new IllegalStateException("Unsupported data type: " + dataType);
                                 }
                             } catch (Exception e) {
-                                // Handle any field-level parsing errors by setting to null
                                 vector.setNull(rowIndex);
                             }
                         } else {
