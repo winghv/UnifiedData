@@ -6,9 +6,40 @@
 
 ## 📖 概述 / Overview
 
-**统一数据服务 (Unified Data Service)** 是一个高性能、配置驱动的Java数据集成平台。它旨在解决企业在面对异构数据源（如JSON、CSV、数据库等）时遇到的数据孤岛问题。通过将不同来源的数据实时转化为标准化的 **Apache Arrow** 内存格式，并提供统一的 **SQL查询** 和 **指标访问** 接口，本服务极大简化了数据消费和分析的复杂度。
+**统一数据服务 (Unified Data Service)** 是一个高性能、配置驱动的Java数据集成平台。它旨在解决企业在面对异构数据源（如JSON、CSV、数据库等）时遇到的数据孤岛问题。通过将不同来源的数据实时转化为标准化的 **Apache Arrow** 内存格式，并提供统一的 **SQL查询** 和 **指标访问** 接口，可快速将新的数据资产纳入平台，并通过标准SQL进行连接、过滤和聚合查询，可以为text2sql大模型定义业务垂类语义视图层的和统一的数据访问接口。
 
-核心价值在于 **“一次配置，处处查询”**。业务人员或数据分析师无需编写任何代码，仅通过在数据库中定义数据源和逻辑表，即可快速将新的数据资产纳入平台，并通过标准SQL进行连接、过滤和聚合查询。这不仅提升了数据接入的敏捷性，还通过 **Apache Arrow** 的列式内存处理和 **Caffeine** 缓存机制，确保了查询的高性能和低延迟，为下游应用（如BI报表、机器学习、实时监控）提供了稳定、高效的数据支持。
+**Unified Data Service** is a high-performance, configuration-driven Java data integration platform. It aims to solve the data silo problem that enterprises encounter when facing heterogeneous data sources (such as JSON, CSV, databases, etc.). By converting data from different sources into the standardized **Apache Arrow** memory format in real time and providing a unified **SQL query** and **metric access** interface, new data assets can be quickly incorporated into the platform, and connected, filtered, and aggregated queries can be performed through standard SQL. It can define a business vertical semantic view layer and a unified data access interface for the text2sql large model.
+
+
+## ✨ 核心优势 / Key Features
+
+- **配置驱动 / Configuration-Driven**
+  - 无需修改代码，仅通过在数据库中添加元数据定义，即可动态接入新的数据指标
+  - No code changes needed, dynamically integrate new data metrics by adding metadata definitions to the database
+
+- **SQL 查询接口 / SQL Query Interface**
+  - 支持标准 SQL 语法查询逻辑表数据
+  - Supports standard SQL syntax for querying logical tables
+  - 自动将 SQL 查询转换为底层指标查询计划
+  - Automatically translates SQL queries to underlying metric query plans
+
+- **逻辑表抽象 / Logical Table Abstraction**
+  - 将多个指标组织为逻辑表，支持表连接和复杂查询
+  - Organizes multiple metrics into logical tables with support for joins and complex queries
+  - 支持按时间和代码分区，优化查询性能
+  - Supports partitioning by time and code for optimized query performance
+
+- **高性能 / High Performance**
+  - 使用 Apache Arrow 进行高效的内存列式数据处理
+  - Efficient in-memory columnar data processing with Apache Arrow
+  - 基于 Caffeine 的缓存层，提高重复查询性能
+  - Caffeine-based caching layer for improved performance on repeated queries
+  - 流式处理大型结果集，降低内存占用
+  - Streaming of large result sets to reduce memory footprint
+
+- **统一与标准化 / Unification & Standardization**
+  - 将多格式的外部数据源统一清洗为标准化的中间数据结构
+  - Unify and clean multi-format data sources into standardized intermediate data structures
 
 
 ## 🚀 快速开始 / Quick Start
@@ -131,6 +162,9 @@ FROM stock_daily
 WHERE trade_date BETWEEN '2023-01-01' AND '2023-12-31'
 GROUP BY code
 HAVING AVG(close) > 10.0;
+
+-- 多数据源指标定义的视图表
+SELECT ticker, date, volume, price FROM stock_quote WHERE ticker = 'AAPL' AND date = 1672531200000;
 ```
 
 #### 流式响应 / Streaming Response
