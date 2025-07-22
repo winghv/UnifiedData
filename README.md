@@ -11,6 +11,8 @@
 **Unified Data Service** is a high-performance, configuration-driven Java data integration platform. It aims to solve the data silo problem that enterprises encounter when facing heterogeneous data sources (such as JSON, CSV, databases, etc.). By converting data from different sources into the standardized **Apache Arrow** memory format in real time and providing a unified **SQL query** and **metric access** interface, new data assets can be quickly incorporated into the platform, and connected, filtered, and aggregated queries can be performed through standard SQL. It can define a business vertical semantic view layer and a unified data access interface for the text2sql large model.
 
 
+![img](source/img/1.jpg)
+
 ## ✨ 核心优势 / Key Features
 
 - **配置驱动 / Configuration-Driven**
