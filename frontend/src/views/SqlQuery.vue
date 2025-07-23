@@ -50,7 +50,7 @@ import { ElMessage } from 'element-plus';
 import queryService from '../services/queryService';
 import { tableFromIPC } from 'apache-arrow';
 
-const sqlQuery = ref('SELECT * FROM METRIC_INFO');
+const sqlQuery = ref("SELECT ticker, date, volume, price FROM stock_quote WHERE ticker = 'AAPL' AND date = 1672531200000");
 const loading = ref(false);
 const results = ref([]);
 const columns = ref([]);
