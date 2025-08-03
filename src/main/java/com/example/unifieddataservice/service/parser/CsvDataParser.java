@@ -1,6 +1,7 @@
 package com.example.unifieddataservice.service.parser;
 
 import com.example.unifieddataservice.model.DataType;
+import com.example.unifieddataservice.model.Predicate;
 import com.example.unifieddataservice.model.UnifiedDataTable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -30,7 +31,7 @@ public class CsvDataParser implements DataParser {
     }
 
     @Override
-    public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath, Map<String, String> columnAlias) {
+    public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath, Map<String, String> columnAlias, List<com.example.unifieddataservice.model.Predicate> predicates) {
         // Use the columnAlias map if provided, otherwise use an empty map
         Map<String, String> aliasMap = columnAlias != null ? columnAlias : Collections.emptyMap();
 
@@ -82,19 +83,26 @@ public class CsvDataParser implements DataParser {
 
             Schema schema = new Schema(fields, null);
             VectorSchemaRoot vectorSchemaRoot = VectorSchemaRoot.create(schema, rootAllocator);
+            
+            // Filter records before processing
+            List<CSVRecord> filteredRecords = new ArrayList<>();
+            for (CSVRecord record : csvParser) {
+                if (recordMatches(record, predicates, fieldToColumnMap)) {
+                    filteredRecords.add(record);
+                }
+            }
+
             vectorSchemaRoot.allocateNew();
 
-            List<CSVRecord> records = csvParser.getRecords();
-            for (int i = 0; i < records.size(); i++) {
-                CSVRecord record = records.get(i);
+            for (int i = 0; i < filteredRecords.size(); i++) {
+                CSVRecord record = filteredRecords.get(i);
                 final int rowIndex = i;
 
                 fieldMappings.forEach((fieldName, dataType) -> {
                     try {
                         FieldVector vector = vectorSchemaRoot.getVector(fieldName);
-                        // Use the mapped column name to get the value from the CSV record
                         String physicalColumn = fieldToColumnMap.get(fieldName);
-                        String value = record.get(physicalColumn);
+                        String value = record.isMapped(physicalColumn) ? record.get(physicalColumn) : null;
 
                         if (value != null && !value.trim().isEmpty()) {
                             try {
@@ -106,7 +114,6 @@ public class CsvDataParser implements DataParser {
                                         try {
                                             ((BigIntVector) vector).setSafe(rowIndex, Long.parseLong(value.trim()));
                                         } catch (NumberFormatException e) {
-                                            // Set to null if number is malformed
                                             vector.setNull(rowIndex);
                                         }
                                         break;
@@ -114,7 +121,6 @@ public class CsvDataParser implements DataParser {
                                         try {
                                             ((Float8Vector) vector).setSafe(rowIndex, Double.parseDouble(value.trim()));
                                         } catch (NumberFormatException e) {
-                                            // Set to null if number is malformed
                                             vector.setNull(rowIndex);
                                         }
                                         break;
@@ -126,7 +132,6 @@ public class CsvDataParser implements DataParser {
                                             long timestamp = Long.parseLong(value.trim());
                                             ((TimeStampMilliTZVector) vector).setSafe(rowIndex, timestamp);
                                         } catch (NumberFormatException e) {
-                                            // Set to null if timestamp is malformed
                                             vector.setNull(rowIndex);
                                         }
                                         break;
@@ -137,16 +142,15 @@ public class CsvDataParser implements DataParser {
                                 vector.setNull(rowIndex);
                             }
                         } else {
-                            // Set to null if value is empty or null
                             vector.setNull(rowIndex);
                         }
                     } catch (Exception e) {
-                        // Skip this field if there's an error
+                        // Skip field on error
                     }
                 });
             }
 
-            vectorSchemaRoot.setRowCount(records.size());
+            vectorSchemaRoot.setRowCount(filteredRecords.size());
             return new UnifiedDataTable(vectorSchemaRoot);
 
         } catch (IllegalArgumentException e) {
@@ -157,5 +161,26 @@ public class CsvDataParser implements DataParser {
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse CSV data: " + e.getMessage(), e);
         }
+    }
+
+    private boolean recordMatches(CSVRecord record, List<Predicate> predicates, Map<String, String> fieldToColumnMap) {
+        if (predicates == null || predicates.isEmpty()) {
+            return true;
+        }
+        for (Predicate predicate : predicates) {
+            String physicalColumn = fieldToColumnMap.get(predicate.columnName());
+            if (physicalColumn == null || !record.isMapped(physicalColumn)) {
+                return false; // Column for predicate not found in record
+            }
+            String recordValue = record.get(physicalColumn);
+            if (recordValue == null) {
+                return false; // Null values don't match for now
+            }
+            // Simplified comparison, assumes EQUALS and string matching
+            if (!recordValue.equals(predicate.value().toString())) {
+                return false; // Predicate does not match
+            }
+        }
+        return true;
     }
 }

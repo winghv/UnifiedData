@@ -1,9 +1,11 @@
 package com.example.unifieddataservice.service.parser;
 
 import com.example.unifieddataservice.model.DataType;
+import com.example.unifieddataservice.model.Predicate;
 import com.example.unifieddataservice.model.UnifiedDataTable;
 
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 
 public interface DataParser {
@@ -14,20 +16,22 @@ public interface DataParser {
      * @param fieldMappings Map of field names to their data types
      * @param dataPath Path to the data within the input (for JSON/XML)
      * @param columnAlias Map of source column names to their aliases (can be null or empty)
+     * @param predicates A list of predicates to be potentially pushed down into the parser.
      * @return A UnifiedDataTable containing the parsed data
      */
     UnifiedDataTable parse(
-        InputStream data, 
-        Map<String, DataType> fieldMappings, 
+        InputStream data,
+        Map<String, DataType> fieldMappings,
         String dataPath,
-        Map<String, String> columnAlias
+        Map<String, String> columnAlias,
+        List<Predicate> predicates
     );
-    
+
     /**
-     * Backward-compatible parse method that doesn't include column aliases.
+     * Backward-compatible parse method that doesn't include column aliases or predicates.
      * Default implementation throws UnsupportedOperationException.
      */
     default UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath) {
-        return parse(data, fieldMappings, dataPath, null);
+        return parse(data, fieldMappings, dataPath, null, List.of());
     }
 }
