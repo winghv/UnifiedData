@@ -1,6 +1,7 @@
 package com.example.unifieddataservice.service.parser;
 
 import com.example.unifieddataservice.model.DataType;
+import com.example.unifieddataservice.model.Predicate;
 import com.example.unifieddataservice.model.UnifiedDataTable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -94,9 +95,9 @@ public class JsonDataParser implements DataParser {
     }
 
     @Override
-    public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath, Map<String, String> columnAlias) {
-        logger.info("Starting JSON parsing with dataPath: '{}', fieldMappings: {}, columnAlias: {}", 
-            dataPath, fieldMappings, columnAlias);
+    public UnifiedDataTable parse(InputStream data, Map<String, DataType> fieldMappings, String dataPath, Map<String, String> columnAlias, List<Predicate> predicates) {
+        logger.info("Starting JSON parsing with dataPath: '{}', fieldMappings: {}, columnAlias: {}, predicates: {}", 
+            dataPath, fieldMappings, columnAlias, predicates);
         
         Objects.requireNonNull(data, "Input stream cannot be null");
         Objects.requireNonNull(fieldMappings, "Field mappings cannot be null");
@@ -161,13 +162,20 @@ public class JsonDataParser implements DataParser {
             if (dataNode.size() > 0) {
                 logger.debug("First item structure: {}", dataNode.get(0).toPrettyString());
             }
+
+            // Filter nodes before processing
+            List<JsonNode> filteredNodes = new ArrayList<>();
+            for (JsonNode itemNode : dataNode) {
+                if (nodeMatches(itemNode, predicates, fieldToColumnMap)) {
+                    filteredNodes.add(itemNode);
+                }
+            }
             
-            int rowCount = dataNode.size();
-            logger.debug("Found array with {} elements", rowCount);
+            int rowCount = filteredNodes.size();
+            logger.debug("Found {} elements after filtering", rowCount);
             
             if (rowCount == 0) {
-                logger.warn("Empty array found in JSON data");
-                // Return an empty table with the correct schema
+                logger.warn("Empty array after filtering JSON data");
                 return createEmptyTable(fieldMappings);
             }
             
@@ -194,7 +202,7 @@ public class JsonDataParser implements DataParser {
             
             // Process each row
             for (int i = 0; i < rowCount; i++) {
-                JsonNode itemNode = dataNode.get(i);
+                JsonNode itemNode = filteredNodes.get(i);
                 if (!itemNode.isObject()) {
                     logger.warn("Skipping non-object row at index {}", i);
                     continue;
@@ -244,5 +252,26 @@ public class JsonDataParser implements DataParser {
             logger.error("Failed to parse JSON data: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to parse JSON data: " + e.getMessage(), e);
         }
+    }
+
+    private boolean nodeMatches(JsonNode node, List<Predicate> predicates, Map<String, String> fieldToColumnMap) {
+        if (predicates == null || predicates.isEmpty()) {
+            return true;
+        }
+        for (Predicate predicate : predicates) {
+            String physicalColumn = fieldToColumnMap.get(predicate.columnName());
+            if (physicalColumn == null) {
+                return false; // Column for predicate not mapped
+            }
+            JsonNode valueNode = node.path(physicalColumn);
+            if (valueNode.isMissingNode() || valueNode.isNull()) {
+                return false; // Null values don't match for now
+            }
+            // Simplified comparison, assumes EQUALS and string matching
+            if (!valueNode.asText().equals(predicate.value().toString())) {
+                return false; // Predicate does not match
+            }
+        }
+        return true;
     }
 }

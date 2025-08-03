@@ -2,8 +2,10 @@ package com.example.unifieddataservice.service;
 
 import com.example.unifieddataservice.model.DataSourceType;
 import com.example.unifieddataservice.model.MetricInfo;
+import com.example.unifieddataservice.model.PushdownResult;
 import com.example.unifieddataservice.model.UnifiedDataTable;
 import com.example.unifieddataservice.repository.MetricInfoRepository;
+import com.example.unifieddataservice.model.Predicate;
 import com.example.unifieddataservice.service.parser.CsvDataParser;
 import com.example.unifieddataservice.service.parser.DataParser;
 import com.example.unifieddataservice.service.parser.JsonDataParser;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,6 +35,7 @@ public class MetricService {
     private final DataFilteringService dataFilteringService;
     private final JsonDataParser jsonDataParser;
     private final CsvDataParser csvDataParser;
+    private final PredicatePushdownService predicatePushdownService;
     
     // Self-reference for handling self-invocation caching
     @Lazy
@@ -41,11 +45,13 @@ public class MetricService {
     public MetricService(MetricInfoRepository metricInfoRepository, 
                         DataFetcherService dataFetcherService, 
                         DataFilteringService dataFilteringService,
+                        PredicatePushdownService predicatePushdownService,
                         JsonDataParser jsonDataParser,
                         CsvDataParser csvDataParser) {
         this.metricInfoRepository = metricInfoRepository;
         this.dataFetcherService = dataFetcherService;
         this.dataFilteringService = dataFilteringService;
+        this.predicatePushdownService = predicatePushdownService;
         this.jsonDataParser = jsonDataParser;
         this.csvDataParser = csvDataParser;
     }
@@ -97,7 +103,7 @@ public class MetricService {
     @Cacheable(value = "metrics", key = "#metricName", sync = true)
     public UnifiedDataTable getMetricData(String metricName) {
         logger.info("Getting metric data for: {}", metricName);
-        return loadMetricData(metricName, null);
+        return loadMetricData(metricName, null, Collections.emptyList());
     }
 
     /**
@@ -107,14 +113,21 @@ public class MetricService {
     @Cacheable(value = "metrics", key = "#metricName + ':' + (#options == null ? '' : #options.hashCode())", sync = true)
     public UnifiedDataTable getMetricData(String metricName, Map<String, String> options) {
         logger.info("Getting metric data for: {}, options: {}", metricName, options);
-        return loadMetricData(metricName, options);
+        return loadMetricData(metricName, options, Collections.emptyList());
     }
+
+    @Cacheable(value = "metrics", key = "#metricName + '_predicates:' + (#predicates == null ? 'none' : #predicates.hashCode())", sync = true)
+    public UnifiedDataTable getMetricData(String metricName, List<Predicate> predicates) {
+        logger.info("Getting metric data for: {}, with predicates: {}", metricName, predicates);
+        return loadMetricData(metricName, null, predicates);
+    }
+    
     
     /**
      * Loads metric data without checking the cache.
      * This method is package-private for testing purposes.
      */
-    UnifiedDataTable loadMetricData(String metricName, Map<String, String> options) {
+    UnifiedDataTable loadMetricData(String metricName, Map<String, String> options, List<Predicate> predicates) {
         logger.info("Loading metric data for: {}", metricName);
         
         try {
@@ -130,9 +143,14 @@ public class MetricService {
             logger.debug("Found metric info: {}", metricInfo);
             // TODO: If metric supports parameters, validate & apply them here using 'options'.
             
-            // Fetch the data
-            logger.info("Fetching data from: {}", metricInfo.getSourceUrl());
-            try (InputStream dataStream = dataFetcherService.fetchData(metricInfo.getSourceUrl())) {
+            // Analyze predicates for pushdown
+            PushdownResult pushdownResult = predicatePushdownService.analyze(predicates, metricInfo);
+            List<Predicate> predicatesToPush = pushdownResult.pushedDown();
+            List<Predicate> predicatesForFallback = pushdownResult.fallback();
+
+            // Fetch the data with pushdown predicates
+            logger.info("Fetching data from: {} with pushdown predicates: {}", metricInfo.getSourceUrl(), predicatesToPush);
+            try (InputStream dataStream = dataFetcherService.fetchData(metricInfo.getSourceUrl(), predicatesToPush)) {
                 if (dataStream == null) {
                     String errorMsg = String.format("Failed to fetch data from URL: %s", metricInfo.getSourceUrl());
                     logger.error(errorMsg);
@@ -143,12 +161,13 @@ public class MetricService {
                 DataParser parser = getParser(metricInfo.getDataSourceType());
                 logger.debug("Using parser: {}", parser.getClass().getSimpleName());
                 
-                // Parse the data with column aliases
+                // Parse the data with column aliases and any applicable pushdown predicates
                 UnifiedDataTable result = parser.parse(
                     dataStream, 
                     metricInfo.getFieldMappings(), 
                     metricInfo.getDataPath(),
-                    metricInfo.getColumnAlias()
+                    metricInfo.getColumnAlias(),
+                    predicatesToPush
                 );
                 
                 logger.debug("Parsed data with {} rows and column aliases: {}", 
@@ -159,8 +178,14 @@ public class MetricService {
                     logger.error(errorMsg);
                     throw new IllegalStateException(errorMsg);
                 }
+
+                // Apply fallback predicates if any
+                if (!predicatesForFallback.isEmpty()) {
+                    logger.info("Applying {} fallback predicates in memory", predicatesForFallback.size());
+                    result = dataFilteringService.applyPredicates(result, predicatesForFallback);
+                }
                 
-                logger.info("Successfully parsed data. Rows: {}", result.getRowCount());
+                logger.info("Successfully processed data. Final rows: {}", result.getRowCount());
                 return result;
             } catch (IOException e) {
                 String errorMsg = String.format("Error processing data stream for metric: %s", metricName);
@@ -186,41 +211,6 @@ public class MetricService {
         // This will trigger the removal listener in CacheConfig for each evicted entry
     }
     
-    public UnifiedDataTable getFilteredMetricData(String metricName, String filter) {
-        logger.info("Getting filtered data for metric: {}, filter: {}", metricName, filter);
-        
-        // Get the data from cache or load it
-        // Use self-invocation proxy to ensure caching works
-        UnifiedDataTable dataTable = self.getMetricData(metricName);
-        
-        if (dataTable == null) {
-            String errorMsg = String.format("No data available for metric: %s", metricName);
-            logger.error(errorMsg);
-            throw new IllegalStateException(errorMsg);
-        }
-        
-        // Apply filter if provided
-        if (filter != null && !filter.isEmpty()) {
-            logger.debug("Applying filter: {}", filter);
-            try {
-                UnifiedDataTable filteredTable = dataFilteringService.filter(dataTable, filter);
-                if (filteredTable == null) {
-                    logger.warn("Filter returned null for metric: {}", metricName);
-                    return dataTable; // Return original if filter fails
-                }
-                
-                logger.info("Filter applied. Rows before: {}, after: {}", 
-                           dataTable.getRowCount(), filteredTable.getRowCount());
-                return filteredTable;
-            } catch (Exception e) {
-                logger.warn("Error applying filter, returning unfiltered data", e);
-                return dataTable;
-            }
-        }
-        
-        logger.debug("No filter applied, returning full dataset");
-        return dataTable;
-    }
 
     private DataParser getParser(DataSourceType type) {
         logger.debug("Getting parser for data source type: {}", type);

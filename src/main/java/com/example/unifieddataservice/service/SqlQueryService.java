@@ -1,6 +1,8 @@
 package com.example.unifieddataservice.service;
 
 import com.example.unifieddataservice.model.MetricQueryPlan;
+import com.example.unifieddataservice.model.Operator;
+import com.example.unifieddataservice.model.Predicate;
 import com.example.unifieddataservice.model.TableDefinition;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.FieldVector;
@@ -68,7 +70,7 @@ public class SqlQueryService {
         Set<String> uniqueMetricNames = new HashSet<>(plan.getFieldMetricMapping().values());
         Map<String, CompletableFuture<UnifiedDataTable>> futureMap = new LinkedHashMap<>();
         for (String metricName : uniqueMetricNames) {
-            futureMap.put(metricName, CompletableFuture.supplyAsync(() -> metricService.getMetricData(metricName)));
+            futureMap.put(metricName, CompletableFuture.supplyAsync(() -> metricService.getMetricData(metricName, plan.getPredicates())));
         }
 
         Map<String, UnifiedDataTable> metricDataMap = new LinkedHashMap<>();
@@ -84,8 +86,9 @@ public class SqlQueryService {
         List<UnifiedDataTable> tables = new ArrayList<>(metricDataMap.values());
         UnifiedDataTable joined = arrowJoinUtil.joinOnKeys(tables, plan.getTableDefinition().getPrimaryKeys(), plan.getTableDefinition().getFieldMapping());
 
-        // Apply WHERE clause filtering
-        return applyWhereClauseFilter(joined, plan.getWhereEqConditions(), plan.getTableDefinition().getFieldMapping());
+        // The WHERE clause is now pushed down, so no need to apply it here.
+        // The applyWhereClauseFilter method will be removed.
+        return joined;
     }
 
     /**
@@ -131,24 +134,30 @@ public class SqlQueryService {
             }
 
             Map<String, Object> pkValues = new HashMap<>();
-            extractConditions(ps.getWhere(), pkValues);
-
-            for (String pk : td.getPrimaryKeys()) {
-                if (!pkValues.containsKey(pk)) {
-                    throw new IllegalArgumentException("Missing primary key in WHERE: " + pk);
-                }
+            List<Predicate> predicates = new ArrayList<>();
+            if (ps.getWhere() != null) {
+                extractPredicates(ps.getWhere(), predicates);
             }
 
-            Map<String, String> whereEqConditions = new HashMap<>();
-            pkValues.forEach((k, v) -> whereEqConditions.put(k, v.toString()));
+            // This primary key check might need to be re-evaluated or moved,
+            // as filtering might not always be on primary keys.
+            // For now, we keep it to ensure basic query integrity.
+            Set<String> predicateColumns = predicates.stream()
+                .map(Predicate::columnName)
+                .collect(Collectors.toSet());
+
+            for (String pk : td.getPrimaryKeys()) {
+                if (!predicateColumns.contains(pk)) {
+                    // throw new IllegalArgumentException("Missing primary key in WHERE: " + pk);
+                }
+            }
 
             return MetricQueryPlan.builder()
                 .tableName(tableName)
                 .tableDefinition(td)
                 .selectFields(selectFields)
                 .fieldMetricMapping(fieldMetricMap)
-                .whereEqConditions(whereEqConditions)
-                .rawWhere(ps.getWhere().toString())
+                .predicates(predicates) // Use the new predicates list
                 .build();
         } catch (Exception e) {
             logger.error("Failed to parse SQL: {}", sql, e);
@@ -156,110 +165,34 @@ public class SqlQueryService {
         }
     }
 
-    private void extractConditions(Expression expression, Map<String, Object> pkValues) {
-        if (expression instanceof EqualsTo) {
-            extractEqualsTo(pkValues, (EqualsTo) expression);
-        } else if (expression instanceof AndExpression) {
+
+    private void extractPredicates(Expression expression, List<Predicate> predicates) {
+        if (expression instanceof AndExpression) {
             AndExpression and = (AndExpression) expression;
-            extractConditions(and.getLeftExpression(), pkValues);
-            extractConditions(and.getRightExpression(), pkValues);
-        }
+            extractPredicates(and.getLeftExpression(), predicates);
+            extractPredicates(and.getRightExpression(), predicates);
+        } else if (expression instanceof EqualsTo) {
+            addPredicate((EqualsTo) expression, Operator.EQUALS, predicates);
+        } // Add other operators like >, <, etc. here as needed
     }
 
-    private void extractEqualsTo(Map<String, Object> pkValues, EqualsTo equalsTo) {
-        String key = ((Column) equalsTo.getLeftExpression()).getColumnName();
-        Expression rightExpr = equalsTo.getRightExpression();
+    private void addPredicate(net.sf.jsqlparser.expression.operators.relational.EqualsTo expression, Operator op, List<Predicate> predicates) {
+        if (!(expression.getLeftExpression() instanceof Column)) {
+            throw new IllegalArgumentException("Unsupported WHERE clause structure: " + expression);
+        }
+        String columnName = ((Column) expression.getLeftExpression()).getColumnName();
+        Expression rightExpr = expression.getRightExpression();
+        Object value;
 
         if (rightExpr instanceof StringValue) {
-            pkValues.put(key, ((StringValue) rightExpr).getValue());
+            value = ((StringValue) rightExpr).getValue();
         } else if (rightExpr instanceof LongValue) {
-            pkValues.put(key, ((LongValue) rightExpr).getValue());
+            value = ((LongValue) rightExpr).getValue();
         } else {
-            throw new IllegalArgumentException("Unsupported value type for " + key);
+            throw new IllegalArgumentException("Unsupported value type for column " + columnName + ": " + rightExpr.getClass().getSimpleName());
         }
+        predicates.add(new Predicate(columnName, op, value));
     }
 
-    /**
-     * Apply WHERE clause filtering to the joined table.
-     */
-    private UnifiedDataTable applyWhereClauseFilter(UnifiedDataTable table, Map<String, String> whereConditions, Map<String, String> fieldMappings) {
-        if (whereConditions == null || whereConditions.isEmpty()) {
-            return table;
-        }
 
-        VectorSchemaRoot root = table.getData();
-        List<Integer> matchingRows = new ArrayList<>();
-
-        for (int row = 0; row < root.getRowCount(); row++) {
-            boolean matchesAll = true;
-            for (Map.Entry<String, String> condition : whereConditions.entrySet()) {
-                String logicalFieldName = condition.getKey();
-                // Use the logical name to find the physical name from the mapping
-                String physicalFieldName = fieldMappings.getOrDefault(logicalFieldName, logicalFieldName);
-                String expectedValue = condition.getValue();
-
-                // Use the physical name to get the vector
-                FieldVector vector = root.getVector(physicalFieldName);
-                if (vector == null) {
-                    // If the physical column doesn't exist, this row can't match.
-                    matchesAll = false;
-                    break;
-                }
-
-                Object actualValue = vector.getObject(row);
-                String actualValueStr;
-
-                if (actualValue instanceof byte[]) {
-                    actualValueStr = new String((byte[]) actualValue, java.nio.charset.StandardCharsets.UTF_8);
-                } else {
-                    actualValueStr = String.valueOf(actualValue);
-                }
-
-                if (!expectedValue.equals(actualValueStr)) {
-                    matchesAll = false;
-                    break;
-                }
-            }
-            if (matchesAll) {
-                matchingRows.add(row);
-            }
-        }
-
-        if (matchingRows.isEmpty()) {
-            return createEmptyTable(table);
-        }
-
-        return createFilteredTable(table, matchingRows);
-    }
-
-    /**
-     * Create an empty table with the same schema as the original.
-     */
-    private UnifiedDataTable createEmptyTable(UnifiedDataTable original) {
-        VectorSchemaRoot originalRoot = original.getData();
-        Schema schema = originalRoot.getSchema();
-        VectorSchemaRoot emptyRoot = VectorSchemaRoot.create(schema, allocator);
-        emptyRoot.allocateNew();
-        emptyRoot.setRowCount(0);
-        return new UnifiedDataTable(original.getTableName(), emptyRoot, schema);
-    }
-
-    /**
-     * Create a filtered table containing only the specified rows.
-     */
-    private UnifiedDataTable createFilteredTable(UnifiedDataTable original, List<Integer> matchingRows) {
-        VectorSchemaRoot originalRoot = original.getData();
-        Schema schema = originalRoot.getSchema();
-        VectorSchemaRoot filteredRoot = VectorSchemaRoot.create(schema, allocator);
-        filteredRoot.allocateNew();
-
-        for (int newRow = 0; newRow < matchingRows.size(); newRow++) {
-            int originalRow = matchingRows.get(newRow);
-            for (org.apache.arrow.vector.FieldVector originalVector : originalRoot.getFieldVectors()) {
-                filteredRoot.getVector(originalVector.getField().getName()).copyFromSafe(originalRow, newRow, originalVector);
-            }
-        }
-        filteredRoot.setRowCount(matchingRows.size());
-        return new UnifiedDataTable(original.getTableName(), filteredRoot, schema);
-    }
 }

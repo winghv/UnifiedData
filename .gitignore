@@ -54,3 +54,7 @@ target/
 
 # Maven wrapper
 exclude: 'mvnw', 'mvnw.cmd', '.mvn/wrapper/maven-wrapper.jar'
+
+# CLAUDE.md
+CLAUDE.md
+

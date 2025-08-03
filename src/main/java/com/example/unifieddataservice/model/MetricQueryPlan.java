@@ -18,6 +18,8 @@ public class MetricQueryPlan {
     private List<String> selectFields;
     /** mapping field -> metricName (with parameters as part of metric string) */
     private Map<String, String> fieldMetricMapping;
+    /** A structured list of filter conditions from the WHERE clause. */
+    private List<Predicate> predicates;
     /** simple equality conditions extracted from WHERE (key -> value). More complex conditions kept as rawWhere. */
     private Map<String, String> whereEqConditions;
     private String rawWhere; // original WHERE clause string
