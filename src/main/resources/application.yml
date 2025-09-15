@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: unified-data
+  
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  h2:
+    console:
+      enabled: true
+  
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+
+server:
+  port: 8080
+
+http:
+  client:
+    default-timeout:
+      read-timeout: 30s
+      connect-timeout: 5s
+    services:
+      service-a:
+        read-timeout: 10s
+        connect-timeout: 2s
+      service-b:
+        read-timeout: 20s
+        connect-timeout: 3s
+      service-c:
+        read-timeout: 15s
+        connect-timeout: 2s
+      user-service:
+        read-timeout: 5s
+        connect-timeout: 1s
+      order-service:
+        read-timeout: 10s
+        connect-timeout: 2s
+      payment-service:
+        read-timeout: 25s
+        connect-timeout: 3s
+      inventory-service:
+        read-timeout: 8s
+        connect-timeout: 2s
+      analytics-service:
+        read-timeout: 30s
+        connect-timeout: 5s
+      notification-service:
+        read-timeout: 5s
+        connect-timeout: 1s
+      report-service:
+        read-timeout: 60s
+        connect-timeout: 5s
+      search-service:
+        read-timeout: 15s
+        connect-timeout: 2s
+      cache-service:
+        read-timeout: 3s
+        connect-timeout: 1s
